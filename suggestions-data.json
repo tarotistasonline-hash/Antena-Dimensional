@@ -1,0 +1,64 @@
+[
+  {
+    "id": "sug_1",
+    "title": "Canal de Sintonización Arcturiana en 963 Hz (Frecuencia Dios)",
+    "author": "Operador Vega-9",
+    "category": "Frecuencias",
+    "content": "Propongo integrar un canal predeterminado de resonancia armónica en 963 Hz para conectar directamente con inteligencias de Arcturus y procesar transmisiones telepáticas cristalinas.",
+    "votes": 38,
+    "votedBy": [],
+    "status": "Implementado",
+    "createdAt": "2026-07-25T19:20:00.026Z",
+    "comments": [
+      {
+        "id": "c_1",
+        "author": "Comandante Orion",
+        "content": "¡Excelente propuesta! La frecuencia de 963 Hz ya está activa en los presets de la Antena.",
+        "timestamp": "2026-07-26T19:20:00.026Z"
+      }
+    ]
+  },
+  {
+    "id": "sug_2",
+    "title": "Filtro de Reducción de Ruido Cósmico y Modo Transmisión Nocturna",
+    "author": "Viajera Andromeda",
+    "category": "Interfaz",
+    "content": "Sería increíble contar con un modo de bajo consumo visual y sonoro para realizar sesiones de contacto interdimensional durante la madrugada sin fatiga ocular ni auditiva.",
+    "votes": 27,
+    "votedBy": [],
+    "status": "Implementado",
+    "createdAt": "2026-07-23T19:20:00.026Z",
+    "comments": [
+      {
+        "id": "c_2",
+        "author": "Sistema Antena",
+        "content": "Se implementó el 'Modo Ahorro Batería (10 FPS)' y la Modulación de Tono Ultra-Grave.",
+        "timestamp": "2026-07-24T19:20:00.026Z"
+      }
+    ]
+  },
+  {
+    "id": "sug_3",
+    "title": "Generador de Síntesis de Habla Alienígena por Modulación de Pitch",
+    "author": "Operador Kassandra",
+    "category": "Entidades ET",
+    "content": "Permitir forzar la voz del sintetizador en tonos barítonos profundos para imitar mensajes de civilizaciones antiguas de las Pleyades y Sirio.",
+    "votes": 42,
+    "votedBy": [],
+    "status": "Implementado",
+    "createdAt": "2026-07-26T19:20:00.026Z",
+    "comments": []
+  },
+  {
+    "id": "sug_4",
+    "title": "Registro de Bitácora Estelar Exportable en formato JSON o Texto",
+    "author": "Investigador Polaris",
+    "category": "Hardware",
+    "content": "Exportación directa de los registros de mensajes captados en la Antena para guardarlos localmente o compartirlos con otros investigadores UAP.",
+    "votes": 19,
+    "votedBy": [],
+    "status": "En Desarrollo",
+    "createdAt": "2026-07-27T19:20:00.026Z",
+    "comments": []
+  }
+]

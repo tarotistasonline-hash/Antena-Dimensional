@@ -1,18 +1,108 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { LogEntry } from "../types";
-import { Search, ChevronDown, ChevronUp, Database, FileSpreadsheet, Trash2, Radio, Send, SlidersHorizontal } from "lucide-react";
+import {
+  Search,
+  ChevronDown,
+  ChevronUp,
+  Database,
+  Trash2,
+  Radio,
+  Send,
+  SlidersHorizontal,
+  Clock,
+  HardDrive,
+  ShieldAlert,
+  CheckCircle2,
+  Sparkles,
+  Info,
+  X
+} from "lucide-react";
 
 interface LogTableProps {
   logs: LogEntry[];
   onClearLogs: () => void;
-  spreadsheetId: string | null;
+  onUpdateLogs?: (newLogs: LogEntry[]) => void;
 }
 
-export default function LogTable({ logs, onClearLogs, spreadsheetId }: LogTableProps) {
+export default function LogTable({ logs, onClearLogs, onUpdateLogs }: LogTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [minResonance, setMinResonance] = useState(0);
   const [selectedEntity, setSelectedEntity] = useState("ALL");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showConfirmClear, setShowConfirmClear] = useState(false);
+
+  // Política de expiración y almacenamiento local
+  const [retentionPolicy, setRetentionPolicy] = useState<string>(() => {
+    return localStorage.getItem("antena_logs_retention_policy") || "30";
+  });
+  const [showPolicyPanel, setShowPolicyPanel] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
+
+  // Guardar cambio de política en localStorage
+  const handlePolicyChange = (newPolicy: string) => {
+    setRetentionPolicy(newPolicy);
+    localStorage.setItem("antena_logs_retention_policy", newPolicy);
+  };
+
+  // Cálculo de logs expirados según la política
+  const getExpiredLogs = (logsList: LogEntry[], policyDaysStr: string): LogEntry[] => {
+    if (policyDaysStr === "never") return [];
+    const days = Number(policyDaysStr);
+    if (isNaN(days) || days <= 0) return [];
+    const limitTime = Date.now() - days * 86400000;
+    return logsList.filter((log) => {
+      const time = new Date(log.timestamp).getTime();
+      return !isNaN(time) && time < limitTime;
+    });
+  };
+
+  const expiredLogs = getExpiredLogs(logs, retentionPolicy);
+  const estimatedBytes = JSON.stringify(logs).length;
+  const estimatedKB = (estimatedBytes / 1024).toFixed(1);
+
+  // Ejecución de purga automática al detectar expirados bajo la política activa
+  useEffect(() => {
+    if (retentionPolicy === "never" || !onUpdateLogs || logs.length === 0) return;
+    const expired = getExpiredLogs(logs, retentionPolicy);
+    if (expired.length > 0) {
+      const expiredIds = new Set(expired.map((l) => l.id));
+      const remaining = logs.filter((l) => !expiredIds.has(l.id));
+      onUpdateLogs(remaining);
+      setNotificationMessage(
+        `🧹 Purga automática completada: Se eliminaron ${expired.length} registro(s) con antigüedad mayor a ${retentionPolicy} día(s).`
+      );
+    }
+  }, [retentionPolicy]);
+
+  // Ejecución manual de purga según la política seleccionada
+  const handleRunPurgeNow = () => {
+    if (!onUpdateLogs) {
+      onClearLogs();
+      return;
+    }
+    if (retentionPolicy === "never") {
+      setNotificationMessage("La política actual está configurada en 'Conservar todo'. Elija un período de expiración (ej. 30 días) para ejecutar la purga.");
+      return;
+    }
+    const expired = getExpiredLogs(logs, retentionPolicy);
+    if (expired.length === 0) {
+      setNotificationMessage(`No hay registros anteriores a ${retentionPolicy} día(s) para purgar en este momento.`);
+      return;
+    }
+    const expiredIds = new Set(expired.map((l) => l.id));
+    const remaining = logs.filter((l) => !expiredIds.has(l.id));
+    onUpdateLogs(remaining);
+    setNotificationMessage(`✅ Purga ejecutada: Se liberaron ~${((JSON.stringify(expired).length) / 1024).toFixed(1)} KB eliminando ${expired.length} registro(s) expirados.`);
+  };
+
+  // Eliminar un solo registro
+  const handleDeleteSingleLog = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onUpdateLogs) {
+      const remaining = logs.filter((l) => l.id !== id);
+      onUpdateLogs(remaining);
+    }
+  };
 
   const uniqueEntities = Array.from(new Set(logs.map((log) => log.entity))).sort();
   const actualSelectedEntity = uniqueEntities.includes(selectedEntity) ? selectedEntity : "ALL";
@@ -34,38 +124,184 @@ export default function LogTable({ logs, onClearLogs, spreadsheetId }: LogTableP
     setExpandedId(expandedId === id ? null : id);
   };
 
+  const handleConfirmClear = () => {
+    onClearLogs();
+    setShowConfirmClear(false);
+  };
+
   return (
-    <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-lg backdrop-blur-md">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-4">
+    <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-lg backdrop-blur-md space-y-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
           <h2 className="text-md font-bold text-slate-100 flex items-center gap-2">
             <Database className="w-4 h-4 text-emerald-400" />
             Bitácora de Contacto Transdimensional
           </h2>
           <p className="text-xs text-slate-400">
-            Historial de señales sintonizadas, transmisiones emitidas y ecos cósmicos.
+            Historial local de señales sintonizadas, transmisiones emitidas y ecos cósmicos.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+          {/* Botón para Abrir Configuración de Política de Expiración */}
+          <button
+            type="button"
+            onClick={() => setShowPolicyPanel(!showPolicyPanel)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all border shrink-0 shadow-sm ${
+              showPolicyPanel
+                ? "bg-amber-500/20 text-amber-300 border-amber-400/60"
+                : "bg-slate-950/80 hover:bg-slate-800 text-slate-300 border-slate-700/80"
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5 text-amber-400" />
+            <span>Expiración</span>
+            <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-amber-950/80 text-amber-300 border border-amber-500/30">
+              {retentionPolicy === "never" ? "Sin Purga" : `${retentionPolicy}d`}
+            </span>
+          </button>
+
           {logs.length > 0 && (
             <button
-              onClick={() => {
-                if (window.confirm("¿Seguro que deseas borrar el registro local de la bitácora?")) {
-                  onClearLogs();
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/40 hover:bg-red-900/40 text-red-400 border border-red-900/50 rounded-lg text-xs font-medium cursor-pointer transition-colors shrink-0"
+              type="button"
+              onClick={() => setShowConfirmClear(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/50 hover:bg-red-900/60 text-red-300 border border-red-800/60 rounded-lg text-xs font-semibold cursor-pointer transition-colors shrink-0 shadow-sm"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              Borrar Bitácora
+              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+              Borrar Todo
             </button>
           )}
         </div>
       </div>
 
+      {/* NOTIFICACIÓN DE ESTADO / ACCIONES DE PURGA */}
+      {notificationMessage && (
+        <div className="p-3 bg-slate-950 border border-emerald-500/40 rounded-xl text-xs text-emerald-300 flex items-center justify-between gap-2 animate-fade-in shadow-inner">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{notificationMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNotificationMessage(null)}
+            className="text-slate-400 hover:text-white p-1 rounded-md cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* PANEL DE CONFIGURACIÓN DE POLÍTICA DE EXPIRACIÓN Y ALMACENAMIENTO */}
+      {showPolicyPanel && (
+        <div className="p-4 bg-slate-950/90 border-2 border-amber-500/40 rounded-xl space-y-4 animate-fade-in shadow-2xl">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-400" />
+              <h3 className="text-xs font-bold text-amber-200 font-mono uppercase tracking-wider">
+                Política de Expiración y Limpieza de Almacenamiento Local
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPolicyPanel(false)}
+              className="text-slate-500 hover:text-slate-300 p-1 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Metrica 1: Total de registros */}
+            <div className="bg-slate-900/70 p-3 rounded-lg border border-slate-800 space-y-1">
+              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Registros Totales</span>
+              <span className="text-lg font-bold font-mono text-slate-100 flex items-center gap-1.5">
+                <Database className="w-4 h-4 text-emerald-400" />
+                {logs.length}
+              </span>
+            </div>
+
+            {/* Metrica 2: Almacenamiento ocupado */}
+            <div className="bg-slate-900/70 p-3 rounded-lg border border-slate-800 space-y-1">
+              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Espacio Local Ocupado</span>
+              <span className="text-lg font-bold font-mono text-cyan-300 flex items-center gap-1.5">
+                <HardDrive className="w-4 h-4 text-cyan-400" />
+                ~{estimatedKB} KB
+              </span>
+            </div>
+
+            {/* Metrica 3: Registros por expirar */}
+            <div className="bg-slate-900/70 p-3 rounded-lg border border-slate-800 space-y-1">
+              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Caducados (Según Política)</span>
+              <span className="text-lg font-bold font-mono text-amber-300 flex items-center gap-1.5">
+                <ShieldAlert className="w-4 h-4 text-amber-400" />
+                {expiredLogs.length} reg.
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/90 p-3 rounded-lg border border-slate-800">
+            <div className="space-y-1">
+              <label htmlFor="retention-policy-select" className="text-[11px] font-bold text-slate-200 block">
+                Seleccionar Retención de Datos:
+              </label>
+              <p className="text-[10px] text-slate-400">
+                Los registros con antigüedad superior al límite serán eliminados automáticamente para optimizar el almacenamiento del navegador.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <select
+                id="retention-policy-select"
+                value={retentionPolicy}
+                onChange={(e) => handlePolicyChange(e.target.value)}
+                className="bg-slate-950 border border-amber-500/50 rounded-lg px-3 py-1.5 text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-400 cursor-pointer"
+              >
+                <option value="never">🌌 Conservar todos (Sin purga automática)</option>
+                <option value="1">⏱️ Borrar registros mayores a 24 Horas (1 Día)</option>
+                <option value="7">📅 Borrar registros mayores a 7 Días</option>
+                <option value="30">🗓️ Borrar registros mayores a 30 Días (Recomendado)</option>
+                <option value="90">🛡️ Borrar registros mayores a 90 Días</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={handleRunPurgeNow}
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs font-mono cursor-pointer transition-colors shadow-sm whitespace-nowrap"
+              >
+                Purga Manual
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cartel de Confirmación de Borrado In-App */}
+      {showConfirmClear && (
+        <div className="p-4 bg-red-950/80 border border-red-800/80 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in text-xs">
+          <div className="flex items-center gap-2 text-red-200">
+            <Trash2 className="w-4 h-4 text-red-400 shrink-0" />
+            <span>¿Confirmar eliminación permanente de <strong>{logs.length}</strong> registro(s) de la bitácora local?</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              onClick={() => setShowConfirmClear(false)}
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-lg text-xs cursor-pointer font-mono"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmClear}
+              className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold cursor-pointer font-mono shadow-md"
+            >
+              Sí, Borrar Todo
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Filtros de Bitácora */}
-      <div id="log-filters" className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5 bg-slate-950/50 p-4 rounded-xl border border-slate-800/60 shadow-inner">
+      <div id="log-filters" className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-950/50 p-4 rounded-xl border border-slate-800/60 shadow-inner">
         {/* Campo de búsqueda de texto */}
         <div className="space-y-1.5">
           <label htmlFor="log-text-filter" className="text-[10px] font-mono text-slate-400 font-semibold uppercase tracking-wider block">
@@ -226,15 +462,16 @@ export default function LogTable({ logs, onClearLogs, spreadsheetId }: LogTableP
                       {log.resonance}% Res.
                     </span>
 
-                    {/* Indicador de Google Sheets sync */}
-                    {spreadsheetId && (
-                      <span
-                        title="Sincronizado con Google Sheets en tu nube"
-                        className="flex items-center gap-0.5 text-[9px] text-emerald-400 font-mono bg-emerald-950/30 px-1.5 py-0.5 rounded border border-emerald-900/30"
+                    {/* Botón de eliminación individual */}
+                    {onUpdateLogs && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteSingleLog(log.id, e)}
+                        title="Eliminar este registro"
+                        className="p-1 text-slate-600 hover:text-red-400 rounded transition-colors cursor-pointer"
                       >
-                        <FileSpreadsheet className="w-3 h-3 text-emerald-400" />
-                        <span className="hidden sm:inline">Sheets</span>
-                      </span>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     )}
 
                     {isExpanded ? (
@@ -289,3 +526,4 @@ export default function LogTable({ logs, onClearLogs, spreadsheetId }: LogTableP
     </div>
   );
 }
+

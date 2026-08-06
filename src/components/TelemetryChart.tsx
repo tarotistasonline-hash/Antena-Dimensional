@@ -76,7 +76,7 @@ export default function TelemetryChart({ logs }: TelemetryChartProps) {
   };
 
   return (
-    <div id="telemetry-chart-container" className="bg-slate-950/80 border border-slate-900 rounded-xl p-4 space-y-3 shadow-md relative overflow-hidden">
+    <div id="telemetry-chart-container" className="bg-slate-950/80 border border-slate-900 rounded-xl p-4 space-y-3 shadow-md relative overflow-hidden animate-glitch-alt">
       {/* Decors */}
       <div className="absolute right-3 top-3 opacity-[0.03] pointer-events-none">
         <Activity className="w-32 h-32 text-emerald-400" />

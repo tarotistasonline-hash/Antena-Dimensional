@@ -5,6 +5,8 @@ interface SignalVisualizerProps {
   unit: string;
   intensity: number;
   status: "success" | "noise" | "anomaly" | "whisper" | "idle";
+  useGaussianFilter?: boolean;
+  isLowPowerMode?: boolean;
 }
 
 export default function SignalVisualizer({
@@ -12,6 +14,8 @@ export default function SignalVisualizer({
   unit,
   intensity,
   status,
+  useGaussianFilter = false,
+  isLowPowerMode = false,
 }: SignalVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -41,17 +45,19 @@ export default function SignalVisualizer({
     const render = (timestamp: number) => {
       animationId = requestAnimationFrame(render);
 
-      // Frame rate limiting to save CPU on idle state
-      if (status === "idle") {
-        const elapsed = timestamp - lastTime;
-        if (elapsed < 1000 / 12) {
-          return;
-        }
-        lastTime = timestamp - (elapsed % (1000 / 12));
+      // Frame rate limiting to save CPU / battery on low power mode or idle state
+      const fpsLimit = isLowPowerMode ? 10 : status === "idle" ? 12 : 24;
+      const elapsed = timestamp - lastTime;
+      if (elapsed < 1000 / fpsLimit) {
+        return;
       }
+      lastTime = timestamp - (elapsed % (1000 / fpsLimit));
 
-      const width = canvas.width / window.devicePixelRatio;
-      const height = canvas.height / window.devicePixelRatio;
+      const width = canvas.width / (window.devicePixelRatio || 1);
+      const height = canvas.height / (window.devicePixelRatio || 1);
+      if (!width || !height || width <= 0 || height <= 0) {
+        return;
+      }
 
       // Draw futuristic dark space background with gradient
       const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
@@ -79,9 +85,9 @@ export default function SignalVisualizer({
         baseAmp = height * 0.1;
         baseSpeed = 0.18;
         baseFreq = 0.08;
-        glowColor = "rgba(148, 163, 184, 0.2)";
-        wireColor = "rgba(148, 163, 184, 0.08)";
-        activeColor = "rgba(148, 163, 184, 0.6)";
+        glowColor = useGaussianFilter ? "rgba(56, 189, 248, 0.5)" : "rgba(148, 163, 184, 0.2)";
+        wireColor = useGaussianFilter ? "rgba(56, 189, 248, 0.2)" : "rgba(148, 163, 184, 0.08)";
+        activeColor = useGaussianFilter ? "rgba(56, 189, 248, 0.95)" : "rgba(148, 163, 184, 0.6)";
       } else if (status === "anomaly") {
         baseAmp = height * 0.26;
         baseSpeed = 0.08;
@@ -93,9 +99,14 @@ export default function SignalVisualizer({
         baseAmp = height * 0.08;
         baseSpeed = 0.025;
         baseFreq = 0.05;
-        glowColor = "rgba(168, 85, 247, 0.3)";
-        wireColor = "rgba(168, 85, 247, 0.12)";
-        activeColor = "rgba(192, 132, 252, 0.8)";
+        glowColor = useGaussianFilter ? "rgba(56, 189, 248, 0.6)" : "rgba(168, 85, 247, 0.3)";
+        wireColor = useGaussianFilter ? "rgba(56, 189, 248, 0.22)" : "rgba(168, 85, 247, 0.12)";
+        activeColor = useGaussianFilter ? "rgba(56, 189, 248, 0.95)" : "rgba(192, 132, 252, 0.8)";
+      }
+
+      if (useGaussianFilter && (status === "success" || status === "idle") && intensity < 50) {
+        glowColor = "rgba(56, 189, 248, 0.5)";
+        activeColor = "rgba(56, 189, 248, 0.9)";
       }
 
       // Frequency factor
@@ -122,31 +133,61 @@ export default function SignalVisualizer({
       // Wave math for any grid point
       const getWaveHeight = (gridX: number, gridZ: number) => {
         if (status === "idle") {
-          return Math.sin(gridX * baseFreq + offset) * baseAmp;
+          let hIdle = Math.sin(gridX * baseFreq + offset) * baseAmp;
+          if (useGaussianFilter) hIdle *= 1.8;
+          return hIdle;
         }
 
         let h = 0;
         const distFromCenter = Math.sqrt(gridX * gridX + (gridZ - 190) * (gridZ - 190)) * 0.01;
 
         if (status === "noise") {
-          // Chaos waves/spikes
-          h = Math.sin(gridX * baseFreq + offset) * Math.cos(gridZ * 0.04 - offset * 1.5) * baseAmp;
-          h += (Math.sin(gridX * 0.1 + offset * 3) + Math.cos(gridZ * 0.08)) * (baseAmp * 0.4);
-          h += (Math.random() - 0.5) * (baseAmp * 0.6); // high noise
+          if (useGaussianFilter) {
+            // Gaussian kernel convolution: e^(-x^2 / (2*sigma^2))
+            // Filters out random high-frequency chaotic spikes and amplifies underlying signal
+            const sigma = 90;
+            const gaussianWeight = Math.exp(-Math.pow(gridX, 2) / (2 * Math.pow(sigma, 2)));
+            const carrier = Math.sin(gridX * baseFreq + offset) * baseAmp * 2.2;
+            const residualNoise = (Math.random() - 0.5) * (baseAmp * 0.08); // 90% noise reduction
+            h = carrier * gaussianWeight + residualNoise;
+          } else {
+            // Chaos waves/spikes
+            h = Math.sin(gridX * baseFreq + offset) * Math.cos(gridZ * 0.04 - offset * 1.5) * baseAmp;
+            h += (Math.sin(gridX * 0.1 + offset * 3) + Math.cos(gridZ * 0.08)) * (baseAmp * 0.4);
+            h += (Math.random() - 0.5) * (baseAmp * 0.6); // high noise
+          }
         } else if (status === "anomaly") {
-          // Turbulent dual-wave with cross ripples
           h = Math.sin(gridX * baseFreq + offset) * Math.cos(gridZ * 0.02 - offset) * baseAmp;
           h += Math.sin(-gridX * 0.02 + gridZ * 0.035 + offset * 1.8) * (baseAmp * 0.5);
           h += Math.sin(distFromCenter * 5 - offset * 2.5) * (baseAmp * 0.3);
+          if (useGaussianFilter) {
+            const sigma = 120;
+            const gaussianWeight = Math.exp(-Math.pow(gridX, 2) / (2 * Math.pow(sigma, 2)));
+            h = h * (0.6 + 0.8 * gaussianWeight);
+          }
         } else if (status === "whisper") {
-          // Deep, slow, harmonic interference ripples
-          h = Math.sin(gridX * baseFreq - offset) * Math.cos(gridZ * 0.015 + offset * 0.5) * baseAmp;
-          h += Math.sin(gridX * 0.015 + gridZ * 0.02 + offset) * (baseAmp * 0.35);
+          if (useGaussianFilter) {
+            // Low-intensity whisper amplification with Gaussian smoothing
+            const sigma = 100;
+            const gaussianWeight = Math.exp(-Math.pow(gridX, 2) / (2 * Math.pow(sigma, 2)));
+            const carrier = Math.sin(gridX * baseFreq - offset) * Math.cos(gridZ * 0.015 + offset * 0.5) * (baseAmp * 2.6);
+            h = carrier * gaussianWeight;
+          } else {
+            // Deep, slow, harmonic interference ripples
+            h = Math.sin(gridX * baseFreq - offset) * Math.cos(gridZ * 0.015 + offset * 0.5) * baseAmp;
+            h += Math.sin(gridX * 0.015 + gridZ * 0.02 + offset) * (baseAmp * 0.35);
+          }
         } else {
           // "success" / Standard coherent transmission waves
-          h = Math.sin(gridX * baseFreq + offset) * Math.cos(gridZ * 0.012 - offset * 0.8) * baseAmp;
-          // Harmonic wave interference
-          h += Math.sin(gridX * 0.02 - offset * 1.4) * (baseAmp * 0.3);
+          if (useGaussianFilter && intensity < 60) {
+            const sigma = 110;
+            const gaussianWeight = Math.exp(-Math.pow(gridX, 2) / (2 * Math.pow(sigma, 2)));
+            const carrier = Math.sin(gridX * baseFreq + offset) * Math.cos(gridZ * 0.012 - offset * 0.8) * (baseAmp * 2.0);
+            h = carrier * (0.5 + 0.7 * gaussianWeight);
+          } else {
+            h = Math.sin(gridX * baseFreq + offset) * Math.cos(gridZ * 0.012 - offset * 0.8) * baseAmp;
+            h += Math.sin(gridX * 0.02 - offset * 1.4) * (baseAmp * 0.3);
+          }
         }
 
         // Dampen waves slightly near the left/right boundaries to keep rendering clean
@@ -287,10 +328,10 @@ export default function SignalVisualizer({
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(animationId);
     };
-  }, [frequency, unit, intensity, status]);
+  }, [frequency, unit, intensity, status, useGaussianFilter]);
 
   return (
-    <div id="visualizer-container" className="relative w-full h-32 md:h-40 bg-slate-950 border border-emerald-900/30 rounded-xl overflow-hidden shadow-[inset_0_4px_30px_rgba(0,0,0,0.85)]">
+    <div id="visualizer-container" className="relative w-full h-32 md:h-40 bg-slate-950 border border-emerald-900/30 rounded-xl overflow-hidden shadow-[inset_0_4px_30px_rgba(0,0,0,0.85)] animate-glitch-oscilloscope">
       <canvas ref={canvasRef} className="w-full h-full block" />
       
       {/* HUD Info Header */}
@@ -318,7 +359,14 @@ export default function SignalVisualizer({
         </span>
       </div>
       
-      {status === "idle" && (
+      {useGaussianFilter && (
+        <div className="absolute top-2.5 right-3.5 flex items-center gap-1.5 font-mono text-[8px] sm:text-[9px] bg-cyan-950/85 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/40 shadow-[0_0_10px_rgba(6,182,212,0.25)] animate-fade-in">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+          <span>GAUSSIANO: ON [σ=1.5 | +3.2 dB CLARIDAD]</span>
+        </div>
+      )}
+
+      {status === "idle" && !useGaussianFilter && (
         <div className="absolute top-2.5 right-3.5 flex items-center gap-1 font-mono text-[8px] bg-amber-950/45 text-amber-400/90 px-2 py-0.5 rounded border border-amber-900/30 animate-pulse">
           <span className="w-1 h-1 rounded-full bg-amber-500 animate-ping mr-1" />
           AHORRO DE ENERGÍA ACTIVO [12 FPS]

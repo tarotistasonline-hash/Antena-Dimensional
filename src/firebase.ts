@@ -1,8 +1,35 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
-import firebaseConfig from '../firebase-applet-config.json';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import {
+  getAuth,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  User
+} from 'firebase/auth';
 
-const app = initializeApp(firebaseConfig);
+let firebaseConfig: any = {
+  apiKey: "AIzaSyDemoPlaceholderKey123456789",
+  authDomain: "antena-dimensional.firebaseapp.com",
+  projectId: "antena-dimensional",
+  storageBucket: "antena-dimensional.appspot.com",
+  messagingSenderId: "100000000000",
+  appId: "1:100000000000:web:1234567890"
+};
+
+// Intento de carga dinámica de la configuración si existe
+try {
+  const loadedConfig = (import.meta as any).glob('../firebase-applet-config.json', { eager: true });
+  const key = Object.keys(loadedConfig)[0];
+  if (key && loadedConfig[key] && loadedConfig[key].default) {
+    firebaseConfig = loadedConfig[key].default;
+  }
+} catch (e) {
+  console.warn("Utilizando configuración local de respaldo para Firebase.");
+}
+
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 
 const provider = new GoogleAuthProvider();
@@ -13,22 +40,29 @@ provider.addScope('https://www.googleapis.com/auth/drive.file');
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
 
-// Initialize auth state listener
+// Initialize auth state listener and check for redirect result
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void
 ) => {
+  // Check if returning from a redirect auth flow
+  getRedirectResult(auth).then((result) => {
+    if (result) {
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        cachedAccessToken = credential.accessToken;
+        if (onAuthSuccess) onAuthSuccess(result.user, credential.accessToken);
+      }
+    }
+  }).catch((err) => {
+    console.warn("Error en el resultado del redireccionamiento:", err);
+  });
+
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      // If we don't have the token in memory yet, the user will need to sign in
-      // or we can retrieve it. Since Firebase doesn't persist the provider accessToken,
-      // the user must trigger a login or we use the cached one if available.
       if (cachedAccessToken) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else {
-        // We have a user session, but we might not have the OAuth token.
-        // It is safer to require a fresh click to fetch the OAuth token if cachedAccessToken is empty,
-        // or let them re-login easily.
         if (onAuthFailure) onAuthFailure();
       }
     } else {
@@ -38,12 +72,23 @@ export const initAuth = (
   });
 };
 
-// Google Sign-In (called from UI button click)
+// Google Sign-In with popup, fallback to redirect if popup is blocked
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
   if (isSigningIn) return null;
   try {
     isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
+    let result;
+    try {
+      result = await signInWithPopup(auth, provider);
+    } catch (popupErr: any) {
+      console.warn("Pop-up falló o fue bloqueado, intentando redirección:", popupErr);
+      if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/popup-closed-by-user' || popupErr.message?.includes('popup')) {
+        await signInWithRedirect(auth, provider);
+        return null;
+      }
+      throw popupErr;
+    }
+
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
       throw new Error('No se obtuvo el token de acceso de Google.');
@@ -67,3 +112,4 @@ export const logout = async () => {
   await auth.signOut();
   cachedAccessToken = null;
 };
+
