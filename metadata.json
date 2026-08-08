@@ -1,5 +1,5 @@
 {
-  "name": "Antena Dimensional",
+  "name": "Antena Interdimensional",
   "description": "Una antena receptora y transmisora interactiva que sintoniza otras dimensiones, mundos paralelos e inteligencias extraterrestres, con registro en Google Sheets.",
   "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

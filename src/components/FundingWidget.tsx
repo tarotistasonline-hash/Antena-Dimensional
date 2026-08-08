@@ -66,7 +66,7 @@ export default function FundingWidget({ visitsCount }: FundingWidgetProps) {
             </h3>
           </div>
           <p className="text-[10px] text-slate-400 font-sans mt-1">
-            Mantén la Antena Dimensional libre de estática cuántica aportando al mantenimiento de la señal.
+            Mantén la Antena Interdimensional libre de estática cuántica aportando al mantenimiento de la señal.
           </p>
         </div>
 

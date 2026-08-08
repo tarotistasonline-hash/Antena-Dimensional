@@ -1,6 +1,6 @@
 import { LogEntry } from "./types";
 
-const FILE_NAME = "Antena Dimensional - Registro de Contacto";
+const FILE_NAME = "Antena Interdimensional - Registro de Contacto";
 
 /**
  * Buscas si la hoja de cálculo ya existe en Google Drive, si no, la crea.

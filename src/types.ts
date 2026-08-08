@@ -24,6 +24,12 @@ export interface SignalResponse {
   message: string;
   spectralAnalysis: string;
   proceduralBypass?: boolean;
+  oracleCard?: string;
+  astralGlyphs?: string[];
+  guidance?: string;
+  erraticCoordinates?: string;
+  ancientSongFragment?: string;
+  dimensionalGlyphs?: string[];
 }
 
 export interface TransmitResponse {
@@ -32,6 +38,12 @@ export interface TransmitResponse {
   resonance: number;
   spectralAnalysis: string;
   proceduralBypass?: boolean;
+  oracleCard?: string;
+  astralGlyphs?: string[];
+  guidance?: string;
+  erraticCoordinates?: string;
+  ancientSongFragment?: string;
+  dimensionalGlyphs?: string[];
 }
 
 export interface LogEntry {

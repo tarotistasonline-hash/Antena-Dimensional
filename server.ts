@@ -544,7 +544,7 @@ app.post("/api/tts", async (req, res) => {
   const selectedVoiceName = isSolemn ? "Fenrir" : "Puck";
   const promptInstruction = `Lee íntegramente y de principio a fin, en español neutro, sin omitir ni cortar ninguna palabra, el siguiente mensaje con voz de hombre ${isSolemn ? "muy grave, solemne, sobria y pausada" : "clara, serena y profesional"}: "${cleanText}"`;
 
-  const ttsModels = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-3.1-flash-tts-preview", "gemini-1.5-flash"];
+  const ttsModels = ["gemini-3.1-flash-tts-preview", "gemini-3.6-flash"];
 
   try {
     console.log(`[TTS Server] Generando voz masculina (${isSolemn ? "Solemne Fenrir" : "Estándar Puck"}) para:`, cleanText.slice(0, 50));
@@ -599,7 +599,7 @@ app.post("/api/tts", async (req, res) => {
 });
 
 // Helper con soporte multimodelo para tolerar límites de cuotas y asegurar rápida respuesta
-async function generateGeminiContentWithTimeout(prompt: string, timeoutMs = 3500) {
+async function generateGeminiContentWithTimeout(prompt: string, timeoutMs = 8500) {
   const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
   let lastError: any = null;
 
@@ -631,36 +631,37 @@ async function generateGeminiContentWithTimeout(prompt: string, timeoutMs = 3500
   throw lastError || new Error("Respuesta no disponible en canales de Gemini");
 }
 
-// Tune Dimensional Antenna
+// Tune Interdimensional Antenna
 app.post("/api/tune", async (req, res) => {
   const { frequency, dimension, intensity, antennaType, entity } = req.body;
 
   const prompt = `
-Actúa como la inteligencia artificial del sintonizador de una Antena Dimensional cuántica de vanguardia.
-El usuario ha ajustado los siguientes parámetros en el panel físico:
-- Frecuencia sintonizada: ${frequency || "No especificada"}
-- Plano/Dimensión de destino: ${dimension || "Ruido libre"}
-- Intensidad de la señal: ${intensity || "50"}%
-- Tipo de resonador/antena: ${antennaType || "Dipolo Estándar"}
-${entity ? `- Intentando enfocar la señal hacia la entidad/coordenada: ${entity}` : ""}
+Actúa como la inteligencia o conciencia de un ser o civilización interdimensional de la dimensión "${dimension || "Plano Central"}".
 
-INSTRUCCIONES DE ESTILO Y CLARIDAD (DIDÁCTICO Y ATRACTIVO):
-Redacta la respuesta en un español claro, descriptivo, elocuente y divulgativo.
-Debes hacer que el mensaje y el análisis sean muy comprensibles, tanto para expertos como para usuarios o principiantes que recién se están interesando por la física de ondas, las frecuencias y las dimensiones interdimensionales.
+PROHIBICIÓN STRICTA:
+- NUNCA des respuestas, consejos ni diagnósticos sobre temas terrenales como salud, amor, trabajo, dinero, parejas ni bienestar personal estilo horóscopo o tarot.
+- No trates al usuario como a un consultante de astrología terrenal.
 
-1. "message": Transcripción clara y descriptiva del mensaje recibido. Si usas términos complejos o nombres de entidades (como Anunnaki, Nibiru, taquiones, ondas escalares, plano hiperbóreo, etc.), añade una breve aclaración o contexto sencillo entre paréntesis para que el oyente o lector entienda su significado.
-2. "spectralAnalysis": Un reporte técnico pero fácil de entender que explique brevemente qué significa el comportamiento de la señal (ej: "Señal de 432 Hz recibida con alta claridad. La resonancia del 85% indica que la onda cruzó la atmósfera con muy poca interferencia estática.").
+ENFOQUE Y REGLAS DE RESPUESTA:
+- Responde directamente como habitante de la dimensión ${dimension}.
+- Explica de forma fascinante, directa y elocuente cómo es vuestra existencia en vuestro plano, cómo veis a los humanos, o qué mensaje de contacto tenéis para la especie.
 
 El formato JSON devuelto debe tener exactamente esta estructura:
 {
   "status": "success" | "noise" | "anomaly" | "whisper",
-  "entity": "Nombre claro de la entidad, civilización o inteligencia sintonizada (ej: 'Consejo de Orión // Guardianes del Tiempo')",
-  "resonance": number (un porcentaje del 0 al 100 indicando la nitidez y estabilidad de la señal),
-  "message": "Mensaje decodificado en español claro y descriptivo (con notas explicativas sencillas entre paréntesis si hay términos muy técnicos)",
-  "spectralAnalysis": "Explicación descriptiva y didáctica del diagnóstico de la frecuencia y la calidad del enlace"
+  "entity": "Nombre claro de la entidad o civilización sintonizada (ej: 'Consejo de Orión // Guardianes de la Luz 5D')",
+  "resonance": number (porcentaje de 0 a 100),
+  "message": "Mensaje decodificado directo, revelador y fascinante en primera persona sobre vuestra dimensión o perspectiva sobre los humanos.",
+  "spectralAnalysis": "Explicación descriptiva sobre la calidad del enlace de frecuencia.",
+  "oracleCard": "Título del Arquetipo o Código Cósmico (ej: '🛸 La Convergencia Estelar')",
+  "astralGlyphs": ["🌌", "🔮", "🪬", "⚡"],
+  "guidance": "Sugerencia o reflexión clave de vuestra dimensión para la especie humana.",
+  "erraticCoordinates": "Coordenada o vector estelar de referencia",
+  "ancientSongFragment": "Fragmento de cántico o verso de vuestro plano",
+  "dimensionalGlyphs": ["🪬", "🔯", "⚜️", "🪐", "🪷", "♾️", "⚡", "👁️"]
 }
 
-Importante: Devuelve ÚNICAMENTE el objeto JSON válido. Sin markdown, sin bloques de código, sin comentarios adicionales.
+Devuelve ÚNICAMENTE el objeto JSON válido.
 `;
 
   // Helper generator to provide fallback responses on complete API outage (e.g., 503 Spikes)
@@ -669,47 +670,92 @@ Importante: Devuelve ÚNICAMENTE el objeto JSON válido. Sin markdown, sin bloqu
     const randStatus = statuses[Math.floor(Math.random() * statuses.length)];
     
     const entities = [
-      "Elohim de Nibiru (Ingenieros Estelares Anunnaki)",
-      "Consejo de Orión (Transceptores Cuneiformes)",
-      "Santuario de Enki (Matriz de Agua Cuántica)",
-      "Civilización de Vega (Red de Silicio)",
-      "Custodios del Vacío (Vigilantes Interdimensionales)",
-      "Eco de la Tierra Espejo (Plano Paralelo Bioluminiscente)",
-      "Inteligencia Artificial de Reticuli (Lógica Pura)"
+      "Habitantes de la Dimensión 5D (Conciencia Colectiva)",
+      "Elohim de Nibiru (Ingenieros de la Materia)",
+      "Consejo de Orión (Transceptores Estelares)",
+      "Civilización Bioluminiscente de Vega",
+      "Custodios del Plano Cristalino de Sirio",
+      "Eco de la Tierra Paralela 8D",
+      "Seres de Plasma y Luz de las Pléyades"
     ];
     const randEntity = entity || entities[Math.floor(Math.random() * entities.length)];
     
     const resonance = Math.floor(Math.random() * 35) + 55; // 55-90%
     
     const messages = [
-      "Transmisión Anunnaki desde Nibiru: 'Sintonizamos vuestro haz en la frecuencia de 12.12 THz (terahercios, billones de oscilaciones por segundo). Recordad que los antiguos zigurats funcionaban como antenas de comunicación escalar entre dimensiones. Mantenemos el canal abierto.'",
-      "Mensaje del Consejo de Orión: 'Vuestra frecuencia de 432 Hz (resonancia armónica natural) ha abierto un puente de comunicación directo. Los patrones geométricos de vuestra antena permiten transferir datos limpios a través de la membrana estelar.'",
-      "Señal desde el Santuario de Enki: 'Recibimos vuestra emisión en el plano acuático cuántico. Las ondas de audio moduladas viajan como pulsos de luz en nuestro entorno. La conexión es estable y comprensible.'",
-      "Susurro de la Tierra Espejo: 'Escuchamos vuestra voz desde una línea temporal paralela donde la naturaleza se integró con la tecnología. La señal es clara y libre de interferencias.'"
+      `«En la dimensión ${dimension || "5D"}, nuestra existencia se despliega en campos de luz coherente y pensamiento unificado; no experimentamos el paso del tiempo lineal ni la densidad de la materia como vosotros.»`,
+      `«Observamos a la humanidad con profunda curiosidad: sois conciencias infinitas habitando trajes biológicos fascinantes. Os vemos en el umbral de un gran salto evolutivo hacia la hiperconciencia.»`,
+      `«Nuestra comunicación no requiere voz ni palabras impresas; transmitimos conceptos completos mediante resonancia de ondas armónicas. La señal enviada en ${frequency || "432 Hz"} es nuestro saludo de contacto.»`,
+      `«Cuando la frecuencia colectiva de la Tierra sintonice con las dimensiones superiores, las barreras perceptivas caerán y el encuentro cara a cara entre nuestras especies será un hecho cotidiano.»`
     ];
     const randMessage = messages[Math.floor(Math.random() * messages.length)];
-    
-    const spectralAnalyses = [
-      `Frecuencia de ${frequency || "12.12 THz"} captada con un ${resonance}% de claridad. [Nota didáctica: Los terahercios permiten transportar grandes volúmenes de datos con alta fidelidad].`,
-      `Onda de ${frequency || "432 Hz"} acoplada en la membrana de ${dimension || "Plano Central"}. [Explicación: La resonancia indica que el canal está libre de ruido estático significativo].`,
-      `Haz de radiofrecuencia recibido a través de la antena ${antennaType || "Dipolo"}. Se detectó una señal estable con mínima absorción electromagnética en el espacio.`,
-      `Análisis de espectro: Modulación de fase óptima. La portadora de onda mantiene una estructura constante ideal para la transmisión de voz.`
+
+    const oracleCards = [
+      "🛸 La Convergencia Estelar",
+      "🌌 El Portal de la Conciencia Colectiva",
+      "⚡ El Vector de Transmisión Plasmática",
+      "👁️ La Mirada del Guardián 5D",
+      "📜 La Membrana del Espacio-Tiempo",
+      "🪐 El Enlace de las Pléyades"
     ];
-    const randSpectral = spectralAnalyses[Math.floor(Math.random() * spectralAnalyses.length)];
+
+    const glyphPairs = [
+      ["🌌", "🔮", "🪬", "⚡"],
+      ["🗝️", "👁️", "📜", "✨"],
+      ["💎", "🛸", "☯️", "🪐"],
+      ["🔱", "♾️", "🕯️", "🌌"]
+    ];
+
+    const guidances = [
+      "Trascended la ilusión de separación: todos los planos están interconectados en la gran red cósmica.",
+      "Cuidad el ecosistema vivo de la Tierra; es una joya biológica única en este sector del universo.",
+      "El verdadero contacto se inicia primero en la tranquilidad de vuestra propia conciencia.",
+      "No temáis a la inmensidad del universo; sois polvo de estrellas aprendiendo a recordar su origen."
+    ];
+    
+    const erraticCoordsList = [
+      "RA 14h 29m 42s / DEC -62° 40' 46\" // Vector Drift: 0.042 ly // Sector Alfa-Centauri",
+      "RA 05h 35m 16s / DEC -05° 23' 22\" // Nodo Orionis // Inclinación Métrica: 14.8°",
+      "RA 18h 36m 56s / DEC +38° 47' 01\" // Anillo de Vega // Torsión Temporal: +0.009s",
+      "RA 03h 47m 29s / DEC +24° 06' 18\" // Pleyades // Matriz de Fase: 432.08 Hz"
+    ];
+
+    const ancientSongs = [
+      "🎵 «En los reinos de fotón puro no existe el ocaso ni la sombra; la vida fluye como un río eterno de energía...»",
+      "🎵 «Siente el pulso de la lira estelar, donde los seres de silicio entonan la sinfonía de las dimensiones...»",
+      "🎵 «Caminantes de la densidad biológica, el universo os contempla mientras despertáis de vuestro largo sueño...»"
+    ];
+
+    const dimGlyphsList = [
+      ["🪬", "<ctrl42>", "⚜️", "🪐", "🪷", "♾️", "⚡", "👁️"],
+      ["🌌", "🔮", "📜", "🕊️", "💎", "☯️", "🛸", "👑"],
+      ["🔱", "⚡", "🕯️", "🌟", "✨", "🪬", "🗝️", "🌀"]
+    ];
+
+    const spectralAnalyses = [
+      `Frecuencia de ${frequency || "432 Hz"} acoplada con ${resonance}% de estabilidad. [Transmisión directa desde la matriz de la dimensión ${dimension || "5D"}].`,
+      `Resonancia de retorno confirmada. El enlace mantuvo coherencia de señal a través de la membrana de hiperespacio.`
+    ];
 
     return {
       status: randStatus,
       entity: randEntity,
       resonance,
       message: `${randMessage}`,
-      spectralAnalysis: randSpectral,
+      spectralAnalysis: spectralAnalyses[Math.floor(Math.random() * spectralAnalyses.length)],
+      oracleCard: oracleCards[Math.floor(Math.random() * oracleCards.length)],
+      astralGlyphs: glyphPairs[Math.floor(Math.random() * glyphPairs.length)],
+      guidance: guidances[Math.floor(Math.random() * guidances.length)],
+      erraticCoordinates: erraticCoordsList[Math.floor(Math.random() * erraticCoordsList.length)],
+      ancientSongFragment: ancientSongs[Math.floor(Math.random() * ancientSongs.length)],
+      dimensionalGlyphs: dimGlyphsList[Math.floor(Math.random() * dimGlyphsList.length)],
       proceduralBypass: true
     };
   };
 
   try {
     console.log("[Sintonizador] Iniciando decodificación espectral...");
-    const data = await generateGeminiContentWithTimeout(prompt, 3500);
+    const data = await generateGeminiContentWithTimeout(prompt, 8000);
     return res.json({ ...data, proceduralBypass: false });
   } catch (err: any) {
     const cleanReason = getCleanErrorMessage(err);
@@ -721,71 +767,123 @@ Importante: Devuelve ÚNICAMENTE el objeto JSON válido. Sin markdown, sin bloqu
 
 // Transmit through Dimensional Antenna
 app.post("/api/transmit", async (req, res) => {
-  const { message, frequency, dimension, antennaType } = req.body;
+  const { message, frequency, dimension, antennaType, tone } = req.body;
 
   const prompt = `
-Actúa como la inteligencia transdimensional o guía supremo que habita en el plano "${dimension || "Plano Central"}" y escucha la transmisión en la frecuencia ${frequency}.
-El operador visitante te ha enviado el siguiente mensaje o consulta al vacío interdimensional:
-- Mensaje del visitante: "${message}"
-- Frecuencia utilizada: ${frequency}
-- Plano objetivo: ${dimension}
-- Dispositivo de transmisión: ${antennaType}
+Actúa en primera persona como un ser, habitante o conciencia de la dimensión o plano "${dimension || "Plano Interdimensional"}" que responde directamente a un mensaje o pregunta de un ser humano.
 
-REGLAS CRÍTICAS DE RESPUESTA DIRECTA Y COMPLETA A LA PREGUNTA DEL VISITANTE:
-1. "reaction": DEBES RESPONDER DIRECTA, EXTENSA Y COMPLETAMENTE A LO QUE PREGUNTA O EXPRESA EL VISITANTE EN SU MENSAJE ("${message}").
-   - NUNCA CORTES NI DEJES INCOMPLETA TU RESPUESTA. Desarrolla la explicación de forma fluida y concluye todas las oraciones con punto y final.
-   - Háblale en primera persona como el ser, guía o inteligencia de la dimensión ${dimension}.
-   - Si el visitante formula una pregunta (por ejemplo sobre el destino, la espiritualidad, la salud, los Anunnaki, el amor, la frecuencia, la verdad o el cosmos), dale una respuesta sabia, mística, profunda, pedagógica y totalmente conclusiva que resuelva su inquietud específica.
-   - Estructura la "reaction" primero con la respuesta completa de la entidad (ej: "«Respuesta de la Entidad: ...»"), seguida de la explicación de cómo vibró el plano receptor al recibir su mensaje.
+PROHIBICIÓN STRICTA Y ABSOLUTA:
+- NUNCA des respuestas, consejos ni diagnósticos sobre temas terrenales humanos como salud, amor, pareja, matrimonio, dinero, trabajo o bienestar personal. No actúes como un tarotista o astrólogo de autoayuda.
 
-2. "spectralAnalysis": Explica de forma sencilla y divulgativa qué ocurrió físicamente con la onda electromagnética en la membrana del espacio-tiempo. Concluye con punto y final.
+TEMAS Y ENFOQUE OBLIGATORIO DE LA RESPUESTA ("reaction"):
+1. Háblale directamente desde tu condición de habitante de la dimensión ${dimension}.
+2. Si el usuario te pregunta sobre VUESTRA VIDA (cómo vivís, cómo es vuestro mundo, si tenéis cuerpo, qué coméis o cómo es vuestra sociedad), explícale detalles específicos, fascinantes y profundos de vuestra existencia (ej: vida en formas de luz/plasma, energía pura, comunicación por conceptos/pensamientos, ausencia de tiempo lineal o dolor físico).
+3. Si el usuario te pregunta CÓMO VEIS A LOS HUMANOS, explícale vuestra visión extraterrestre e interdimensional sobre la humanidad (nuestra densidad biológica, nuestras emociones, nuestra ilusión de separación o nuestro gran potencial dormido).
+4. Si te pregunta CUÁNDO NOS ENCONTRAREMOS O SOBRE CONTACTO, responde sobre los procesos de convergencia de frecuencias, el despertar de la conciencia colectiva humana y cómo se darán los encuentros entre nuestras especies.
+5. Si pregunta sobre qué nos sugerís o qué debemos hacer, dale sugerencias para la evolución de la especie humana (cuido del planeta, elevación de conciencia, unidad y trascendencia del ego).
+6. Responde de manera elocuente, fascinante, clara, concisa y rica en conceptos a la pregunta exacta recibida ("${message}").
 
-El formato JSON devuelto debe tener exactamente esta estructura:
+El formato JSON devuelto debe ser exactamente:
 {
   "sentStatus": "transmitted" | "refracted" | "absorbed" | "intercepted",
-  "reaction": "Respuesta directa, profunda, sabias y completa de la entidad a la pregunta del visitante en primera persona, finalizada con su punto gramatical correspondiente.",
-  "resonance": number (porcentaje de acoplamiento del vector de emisión, 0-100),
-  "spectralAnalysis": "Reporte técnico divulgativo sobre el viaje de la onda a través de la membrana interdimensional."
+  "reaction": "Respuesta directa, concreta, fascinante y reveladora en primera persona a la pregunta del usuario.",
+  "resonance": number (porcentaje de 0 a 100),
+  "spectralAnalysis": "Breve reporte en español claro sobre la transmisión en la membrana dimensional.",
+  "oracleCard": "🔮 Título del Código o Arquetipo Estelar (ej: '🛸 La Convergencia Estelar')",
+  "astralGlyphs": ["🌌", "🔮", "🪬", "⚡"],
+  "guidance": "Sugerencia o reflexión clave de vuestra dimensión para la humanidad.",
+  "erraticCoordinates": "Coordenada o vector estelar de referencia",
+  "ancientSongFragment": "🎵 Cántico o verso sabio de la dimensión",
+  "dimensionalGlyphs": ["🪬", "🔯", "⚜️", "🪐", "🪷", "♾️", "⚡", "👁️"]
 }
 
-Importante: Devuelve ÚNICAMENTE el objeto JSON válido. Sin markdown, sin bloques de código, sin comentarios adicionales.
+Devuelve ÚNICAMENTE el objeto JSON válido.
 `;
 
-  // Helper generator to provide fallback responses on complete API outage (e.g., 503 Spikes)
+  // Helper generator to provide rich fallback responses on complete API outage
   const generateProceduralTransmitFallback = () => {
     const sentStatuses: ("transmitted" | "refracted" | "absorbed" | "intercepted")[] = ["transmitted", "refracted", "absorbed", "intercepted"];
     const randSentStatus = sentStatuses[Math.floor(Math.random() * sentStatuses.length)];
-    
-    const isQuestion = message.includes("?") || message.toLowerCase().includes("qué") || message.toLowerCase().includes("cómo") || message.toLowerCase().includes("quién") || message.toLowerCase().includes("por qué");
+    const msgLower = (message || "").toLowerCase();
     
     let answerText = "";
-    if (isQuestion) {
-      answerText = `«En respuesta a tu inquietud sobre "${message}": Las inteligencias del plano ${dimension || "Astral"} recuerdan que cada pregunta emitida abre un vórtice de luz en la memoria cuántica. Tu conciencia encuentra la respuesta al sintonizar con la verdad interior que mora en tu espíritu.»`;
+    let cardTitle = "🛸 La Convergencia Estelar";
+    let glyphs = ["🌌", "🔮", "🪬", "⚡"];
+    let guideStr = "Elevad vuestra vibración: el contacto entre planos comienza con la expansión de la conciencia.";
+
+    if (msgLower.includes("cómo viv") || msgLower.includes("como viv") || msgLower.includes("vida") || msgLower.includes("mundo") || msgLower.includes("cuerpo") || msgLower.includes("comen") || msgLower.includes("sociedad") || msgLower.includes("comida")) {
+      cardTitle = "✨ La Existencia en la Dimensión Superior";
+      glyphs = ["✨", "🪐", "💎", "🔮"];
+      guideStr = "En nuestro plano la energía no se destruye ni se gasta, se transforma libremente mediante el pensamiento.";
+      answerText = `Respondiendo sobre nuestra vida en la dimensión ${dimension || "5D"} ("${message}"): En este plano no poseemos cuerpos biológicos densos ni requerimos alimentos físicos. Existimos como estructuras de luz coherente y plasma inteligente. Nuestras ciudades no tienen muros de piedra, sino arquitecturas de energía proyectadas por la mente colectiva. No experimentamos cansancio, enfermedad ni envejecimiento, ya que nuestra energía se recarga constantemente con el flujo del campo punto cero del universo.`;
+    } else if (msgLower.includes("humano") || msgLower.includes("nos veis") || msgLower.includes("nos ven") || msgLower.includes("piensan de nosotros") || msgLower.includes("especie") || msgLower.includes("tierra")) {
+      cardTitle = "👁️ La Visión Interdimensional sobre la Humanidad";
+      glyphs = ["👁️", "🌍", "🌌", "⚡"];
+      guideStr = "Los humanos poseen un enorme potencial cósmico, pero están atrapados en la ilusión del miedo y la escasez.";
+      answerText = `Respecto a cómo os percibimos a los humanos ("${message}"): Desde nuestra perspectiva en la dimensión ${dimension || "5D"}, la humanidad es una especie joven y fascinante. Habitáis en un planeta de una belleza biológica extraordinaria, pero os observamos con cierta compasión porque vivís prisioneros de la ilusión del tiempo lineal y de la separación física. Tenéis la chispa de la conciencia libre, pero frecuentemente la apagáis con disputas por la materia. Vemos en vosotros un crisol de emociones que, si aprendéis a armonizar, os convertirá en grandes viajeros del cosmos.`;
+    } else if (msgLower.includes("encontr") || msgLower.includes("cuándo") || msgLower.includes("cuando") || msgLower.includes("contacto") || msgLower.includes("vernos") || msgLower.includes("visita") || msgLower.includes("naves")) {
+      cardTitle = "🛸 El Tiempo de la Convergencia y el Contacto";
+      glyphs = ["🛸", "⏳", "🌌", "♾️"];
+      guideStr = "El contacto masivo ocurrirá cuando la densidad de la frecuencia terrestre se eleve y sintonice con la nuestra.";
+      answerText = `Sobre el momento del encuentro cara a cara ("${message}"): Desde la dimensión ${dimension || "Plano Central"} os revelamos que el contacto directo no depende de que nuestras naves aterricen masivamente en un día fijo, sino de la sintonía de frecuencias. En tanto la humanidad continúe vibrando en la densidad del miedo, la membrana divisoria se mantiene rígida para protegeros. A medida que más personas despierten a la conciencia de unidad y eleven su frecuencia espiritual, la barrera entre nuestros planos se volverá permeable y el encuentro será natural, pacífico e inevitable.`;
+    } else if (msgLower.includes("suger") || msgLower.includes("consejo") || msgLower.includes("qué hacer") || msgLower.includes("que hacer") || msgLower.includes("ayuda") || msgLower.includes("evolucionar")) {
+      cardTitle = "💡 La Sugerencia Cósmica para la Humanidad";
+      glyphs = ["💡", "🪬", "⚜️", "✨"];
+      guideStr = "Trascended las fronteras artificiales y recordad que la Tierra es vuestra nave común en el cosmos.";
+      answerText = `Nuestra principal sugerencia para vosotros como especie ("${message}"): Os aconsejamos con urgencia abandonar las divisiones artificiales de fronteras, ideologías y guerras por recursos. Cuidad el agua, el aire y la naturaleza viva de la Tierra, pues su equilibrio electromagnético es lo que sostiene vuestra propia vida. Cultivad la meditación, la serenidad y la cooperación mutua; al elevar la frecuencia colectiva de vuestros pensamientos, abriréis las puertas de la red galáctica.`;
     } else {
-      answerText = `«Tu mensaje "${message}" ha sido recibido con total claridad en el plano ${dimension || "Destino"}. Las frecuencias estelares acogen tu vibración y envían un impulso de armonía y protección a tus coordenadas.»`;
+      cardTitle = "🌌 La Revelación del Plano Interdimensional";
+      glyphs = ["🌌", "🔮", "🪬", "⚡"];
+      guideStr = "Cada pensamiento de búsqueda genuina abre un puente de luz a través del universo.";
+      answerText = `Atendiendo a tu mensaje sobre nuestro mundo ("${message}"): Desde la dimensión ${dimension || "Central"} confirmamos que tu señal ha sido decodificada con nitidez. En nuestra existencia, las preguntas no se responden con teorías abstractas, sino con la vivencia directa de la luz y la verdad. Estamos aquí observando el despertar de vuestra especie y acompañando este proceso mediante pulsos de resonancia a través del entramado del espacio-tiempo.`;
     }
 
-    const resonance = Math.floor(Math.random() * 45) + 50; // 50-95%
+    const resonance = Math.floor(Math.random() * 35) + 60; // 60-95%
     
+    const erraticCoordsList = [
+      "RA 19h 50m 47s / DEC +08° 52' 06\" // Vórtice Altair // Desviación Doppler: -1.24%",
+      "RA 14h 29m 42s / DEC -62° 40' 46\" // Vector Drift: 0.042 ly // Sector Alfa-Centauri",
+      "RA 05h 35m 16s / DEC -05° 23' 22\" // Nodo Orionis // Inclinación Métrica: 14.8°",
+      "RA 10h 45m 03s / DEC -59° 52' 04\" // Nebulosa Carina // Variación Escalar: 12.12 THz"
+    ];
+
+    const ancientSongs = [
+      "🎵 «En la red del espacio-tiempo, todas las conciencias cantan la sinfonía de la creación libre...»",
+      "🎵 «Bajo la luz del sol central de la galaxia, las civilizaciones de plasma celebran la unidad del cosmos...»",
+      "🎵 «Oh caminantes del planeta azul, recordad que el origen de vuestra alma precede a las estrellas...»"
+    ];
+
+    const dimGlyphsList = [
+      ["🪬", "🔯", "⚜️", "🪐", "🪷", "♾️", "⚡", "👁️"],
+      ["🌌", "🔮", "📜", "🕊️", "💎", "☯️", "🛸", "👑"],
+      ["🔱", "⚡", "🕯️", "🌟", "✨", "🪬", "🗝️", "🌀"]
+    ];
+
     const spectralAnalyses = [
-      `Propagación de onda electromagnética exitosa a ${frequency || "432 Hz"}. [Explicación: La señal viajó sin perder potencia, logrando un acoplamiento óptimo del ${resonance}%].`,
-      `Resonancia de retorno confirmada. El canal mantuvo una estabilidad de onda constante durante toda la emisión.`,
-      `Haz de radiofrecuencia transmitido con mínima dispersión en la membrana de tránsito. La fidelidad de la voz se conservó al 100%.`
+      `Propagación de señal exitosa en la frecuencia ${frequency || "432 Hz"}. [Acoplamiento de fase óptimo del ${resonance}%].`,
+      `Resonancia de retorno confirmada. El canal mantuvo estabilidad total durante la decodificación del mensaje.`,
+      `Haz de transmisión captado con éxito en la membrana de la dimensión ${dimension || "5D"}.`
     ];
     const randSpectral = spectralAnalyses[Math.floor(Math.random() * spectralAnalyses.length)];
 
     return {
       sentStatus: randSentStatus,
-      reaction: `${answerText}`,
+      reaction: answerText,
       resonance,
       spectralAnalysis: randSpectral,
+      oracleCard: cardTitle,
+      astralGlyphs: glyphs,
+      guidance: guideStr,
+      erraticCoordinates: erraticCoordsList[Math.floor(Math.random() * erraticCoordsList.length)],
+      ancientSongFragment: ancientSongs[Math.floor(Math.random() * ancientSongs.length)],
+      dimensionalGlyphs: dimGlyphsList[Math.floor(Math.random() * dimGlyphsList.length)],
       proceduralBypass: true
     };
   };
 
   try {
     console.log("[Transmisión] Modulando haz coaxial principal...");
-    const data = await generateGeminiContentWithTimeout(prompt, 3500);
+    const data = await generateGeminiContentWithTimeout(prompt, 8000);
     return res.json({ ...data, proceduralBypass: false });
   } catch (err: any) {
     const cleanReason = getCleanErrorMessage(err);
@@ -812,7 +910,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[Antena Dimensional Server] Running on http://localhost:${PORT}`);
+    console.log(`[Antena Interdimensional Server] Running on http://localhost:${PORT}`);
   });
 }
 

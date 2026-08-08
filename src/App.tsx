@@ -38,6 +38,10 @@ import {
   Clock,
   Square,
   Play,
+  Compass,
+  Music,
+  Navigation,
+  MapPin,
 } from "lucide-react";
 import { DimensionPreset, LogEntry, SignalResponse, TransmitResponse } from "./types";
 import { DIMENSION_PRESETS } from "./presets";
@@ -86,11 +90,19 @@ export default function App() {
 
   // Microphone and Voice Modulation States
   const [isRecording, setIsRecording] = useState(false);
+  const isRecordingRef = useRef(false);
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
+
   const [voiceVolume, setVoiceVolume] = useState<number>(0);
   const [vocalFrequency, setVocalFrequency] = useState<number>(0);
   const [recognitionInstance, setRecognitionInstance] = useState<any>(null);
+  const recognitionRef = useRef<any>(null);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   // Antenna Tuning States
   const [frequencyValue, setFrequencyValue] = useState<number>(432);
@@ -293,6 +305,8 @@ export default function App() {
   const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const ttsSessionIdRef = useRef<number>(0);
   const ttsKeepAliveIntervalRef = useRef<any>(null);
+  const isTransmittingRef = useRef<boolean>(false);
+  const isStoppingVoiceRef = useRef<boolean>(false);
 
   // Detiene completamente cualquier voz o audio TTS en curso (tanto servidor Gemini como voz local del navegador)
   const stopAllSpeech = () => {
@@ -543,9 +557,9 @@ export default function App() {
   const sendWebNotification = (title: string, body: string, type: "anomaly" | "high-intensity") => {
     // Parpadeo dinámico en el título de la pestaña del navegador
     if (typeof document !== "undefined") {
-      const oldTitle = "Antena Dimensional - Sintonizador Cuántico";
+      const oldTitle = "Antena Interdimensional - Sintonizador Cuántico";
       const iconText = type === "anomaly" ? "⚠️ ¡ANOMALÍA!" : "📡 ¡SEÑAL ALTA!";
-      document.title = `${iconText} - Antena Dimensional`;
+      document.title = `${iconText} - Antena Interdimensional`;
       setTimeout(() => {
         document.title = oldTitle;
       }, 6000);
@@ -1009,6 +1023,9 @@ export default function App() {
     try {
       setError(null);
       
+      // Abrir inmediatamente el Canal Transmisor para ver la captura por voz
+      setActiveTab("transmisor");
+
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       let recognition: any = null;
       if (SpeechRecognition) {
@@ -1033,15 +1050,24 @@ export default function App() {
           console.warn("Transcriptor de voz con reconexión activa:", err);
         };
 
+        recognition.onend = () => {
+          if (isRecordingRef.current && !isStoppingVoiceRef.current) {
+            stopVoiceModulation(true);
+          }
+        };
+
         recognition.start();
+        recognitionRef.current = recognition;
         setRecognitionInstance(recognition);
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
       setAudioStream(stream);
 
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       const ctx = new AudioContextClass();
+      audioContextRef.current = ctx;
       setAudioContext(ctx);
 
       const source = ctx.createMediaStreamSource(stream);
@@ -1096,9 +1122,17 @@ export default function App() {
 
       requestAnimationFrame(updateAudioData);
       
+      // Scroll suave hacia el panel del transmisor
+      setTimeout(() => {
+        const panel = document.getElementById("quantum-transmitter-panel");
+        if (panel) {
+          panel.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 100);
+
       addToast(
-        "CAPTURA DE VOZ ACTIVA",
-        "Habla por el micrófono para modular el haz cuántico y dictar tu mensaje de transmisión.",
+        "CAPTURA DE VOZ ACTIVA (ENVÍO INSTANTÁNEO)",
+        "Habla por tu micrófono. Al detener o terminar de hablar, tu mensaje por voz se enviará instantáneamente al vacío.",
         "high-intensity"
       );
 
@@ -1109,40 +1143,96 @@ export default function App() {
     }
   };
 
-  // Detener modulación por voz
-  const stopVoiceModulation = () => {
-    if (recognitionInstance) {
-      try {
-        recognitionInstance.stop();
-      } catch (e) {
-        console.error(e);
-      }
-      setRecognitionInstance(null);
-    }
+  // Detener modulación por voz con envío instantáneo al vacío opcional
+  const stopVoiceModulation = (autoTransmit = false) => {
+    if (isStoppingVoiceRef.current) return;
+    isStoppingVoiceRef.current = true;
 
-    if (audioStream) {
-      audioStream.getTracks().forEach((track) => track.stop());
-      setAudioStream(null);
-    }
-
-    if (audioContext) {
-      try {
-        audioContext.close();
-      } catch (e) {
-        console.error(e);
-      }
-      setAudioContext(null);
-    }
-
+    // Flag de grabación desactivado al inicio para evitar bucles o llamadas múltiples
+    isRecordingRef.current = false;
     setIsRecording(false);
     setVoiceVolume(0);
     setVocalFrequency(0);
 
-    addToast(
-      "MODULACIÓN VOCAL FIJADA",
-      "La portadora biológica se ha estabilizado. El mensaje está listo para ser propagado.",
-      "high-intensity"
-    );
+    // 1. Apagar e interrumpir reconocedor de voz inmediatamente
+    const activeRecognition = recognitionRef.current || recognitionInstance;
+    if (activeRecognition) {
+      try {
+        activeRecognition.onend = null; // Remover listener para prevenir re-disparos en abort
+        activeRecognition.onerror = null;
+        activeRecognition.onresult = null;
+        activeRecognition.abort();
+      } catch (e) {
+        console.error("Error al abortar reconocedor de voz:", e);
+      }
+      recognitionRef.current = null;
+      setRecognitionInstance(null);
+    }
+
+    // 2. Detener y liberar categóricamente los tracks del micrófono
+    const activeStream = audioStreamRef.current || audioStream;
+    if (activeStream) {
+      try {
+        activeStream.getTracks().forEach((track) => {
+          track.stop();
+          track.enabled = false;
+        });
+      } catch (e) {
+        console.error("Error al detener pistas de micrófono:", e);
+      }
+      audioStreamRef.current = null;
+      setAudioStream(null);
+    }
+
+    // 3. Cerrar contexto de audio si sigue activo
+    const activeAudioCtx = audioContextRef.current || audioContext;
+    if (activeAudioCtx) {
+      try {
+        activeAudioCtx.close().catch(() => {});
+      } catch (e) {
+        console.error("Error al cerrar AudioContext:", e);
+      }
+      audioContextRef.current = null;
+      setAudioContext(null);
+    }
+
+    setIsRecording(false);
+    isRecordingRef.current = false;
+    setVoiceVolume(0);
+    setVocalFrequency(0);
+
+    // Inmediatamente cambiar al canal transmisor
+    setActiveTab("transmisor");
+
+    if (autoTransmit) {
+      addToast(
+        "⚡ TRANSMITIENDO MENSAJE DE VOZ AL VACÍO",
+        "Tu mensaje por voz se está emitiendo inmediatamente al vacío cuántico...",
+        "high-intensity"
+      );
+      setTimeout(() => {
+        isStoppingVoiceRef.current = false;
+        handleTransmit();
+      }, 150);
+    } else {
+      isStoppingVoiceRef.current = false;
+      setTimeout(() => {
+        const panel = document.getElementById("quantum-transmitter-panel");
+        if (panel) {
+          panel.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        const textarea = document.getElementById("transmission-textarea") as HTMLTextAreaElement | null;
+        if (textarea) {
+          textarea.focus();
+        }
+      }, 120);
+
+      addToast(
+        "VOZ CAPTURADA",
+        "Tu mensaje por voz se ha capturado correctamente.",
+        "high-intensity"
+      );
+    }
   };
 
   // Initialize auth and load local logs on mount
@@ -1283,14 +1373,20 @@ export default function App() {
   // Limpieza de audio al desmontar
   useEffect(() => {
     return () => {
-      if (audioStream) {
-        audioStream.getTracks().forEach((track) => track.stop());
+      const activeStream = audioStreamRef.current || audioStream;
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => track.stop());
       }
-      if (audioContext) {
-        audioContext.close().catch(() => {});
+      const activeRec = recognitionRef.current || recognitionInstance;
+      if (activeRec) {
+        try { activeRec.abort(); } catch (e) {}
+      }
+      const activeCtx = audioContextRef.current || audioContext;
+      if (activeCtx) {
+        activeCtx.close().catch(() => {});
       }
     };
-  }, [audioStream, audioContext]);
+  }, [audioStream, audioContext, recognitionInstance]);
 
 
 
@@ -1309,6 +1405,148 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
   }
 };
 
+// Banco de datos dinámicos para respuestas del vacío
+const ERRATIC_COORDINATES_POOL = [
+  "RA 14h 29m 42s / DEC -62° 40' 46\" // Vector Drift: 0.042 ly // Sector Alfa-Centauri",
+  "RA 05h 35m 16s / DEC -05° 23' 22\" // Nodo Orionis // Inclinación Métrica: 14.8°",
+  "RA 18h 36m 56s / DEC +38° 47' 01\" // Anillo de Vega // Torsión Temporal: +0.009s",
+  "RA 03h 47m 29s / DEC +24° 06' 18\" // Pleyades // Matriz de Fase: 432.08 Hz",
+  "RA 19h 50m 47s / DEC +08° 52' 06\" // Vórtice Altair // Desviación Doppler: -1.24%",
+  "RA 06h 45m 08s / DEC -16° 42' 58\" // Cuadrante Sirio B // Membrana Cristalina Alfa",
+  "RA 10h 45m 03s / DEC -59° 52' 04\" // Nebulosa Carina // Variación Escalar: 12.12 THz"
+];
+
+const ANCIENT_SONGS_POOL = [
+  "🎵 «Bajo los tres soles de Alcyone, los hijos del silicio entonan la sinfonía de la luz perpetua...»",
+  "🎵 «E-nu-ma e-lish la na-bu-u sha-ma-mu... las aguas vivas resonaron en los zigurats de oro antes del gran alba.»",
+  "🎵 «Siente el latido de la lira de Vega, donde los espíritus estelares tejen túnicas de fotones y geometría sagrada...»",
+  "🎵 «Ura-nu sub-tu ma-da-na... el canto del fuego sagrado que limpia las sombras entre las estrellas.»",
+  "🎵 «En los jardines flotantes de Nibiru, el agua cuántica responde al sonido de la flauta de lapislázuli...»",
+  "🎵 «Oh caminante del tiempo, no hay distancia en la canción eterna que une tu pulso con el centro galáctico...»",
+  "🎵 «Kwan-yin shanti om... los ríos del hiperespacio cantan la dulce alabanza de la unidad del cosmos.»"
+];
+
+const DIMENSIONAL_GLYPHS_POOL = [
+  ["🪬", "🔯", "⚜️", "🪐", "🪷", "♾️", "⚡", "👁️"],
+  ["🌌", "🔮", "📜", "🕊️", "💎", "☯️", "🛸", "👑"],
+  ["🔱", "⚡", "🕯️", "🌟", "✨", "🪬", "🗝️", "🌀"],
+  ["🪐", "🌙", "🧿", "⚜️", "🔮", "🎆", "♾️", "👁️"]
+];
+
+const getRandomPoolItem = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+
+const ensureVoidSignalExtras = (resp: SignalResponse): SignalResponse => ({
+  ...resp,
+  erraticCoordinates: resp.erraticCoordinates || getRandomPoolItem(ERRATIC_COORDINATES_POOL),
+  ancientSongFragment: resp.ancientSongFragment || getRandomPoolItem(ANCIENT_SONGS_POOL),
+  dimensionalGlyphs: resp.dimensionalGlyphs && resp.dimensionalGlyphs.length > 0
+    ? resp.dimensionalGlyphs
+    : getRandomPoolItem(DIMENSIONAL_GLYPHS_POOL),
+});
+
+const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => ({
+  ...resp,
+  erraticCoordinates: resp.erraticCoordinates || getRandomPoolItem(ERRATIC_COORDINATES_POOL),
+  ancientSongFragment: resp.ancientSongFragment || getRandomPoolItem(ANCIENT_SONGS_POOL),
+  dimensionalGlyphs: resp.dimensionalGlyphs && resp.dimensionalGlyphs.length > 0
+    ? resp.dimensionalGlyphs
+    : getRandomPoolItem(DIMENSIONAL_GLYPHS_POOL),
+});
+
+  // Generador de respuesta enriquecida local para sintonización (Fallback offline/red)
+  const getRichTuneFallback = (
+    targetDimension: string,
+    targetEntityName?: string,
+    freqStr?: string
+  ): SignalResponse => {
+    const entityName = targetEntityName || "Consejo de Orión // Guardianes del Tiempo";
+    const messages = [
+      `«Sintonización establecida con ${entityName}. Nuestra transmisión cruza la membrana de la dimensión ${targetDimension}. Recordad que vuestra mente es el transceptor natural para decodificar los pulsos de alta frecuencia.»`,
+      `«Recepción clara desde el plano ${targetDimension}. Las líneas de campo magnético han alineado vuestra antena. La sabiduría estelar fluye en cada armónico de vuestra voz.»`,
+      `«Portal de comunicación activo con ${entityName}. Los códigos de resonancia confirman que tu búsqueda de conocimiento abre vías de luz en la matriz cuántica.»`,
+      `«Escuchamos vuestra sintonía en la frecuencia ${freqStr || "432 Hz"}. Mantened la intención enfocada y permitid que la información sutil repose en vuestra intuición.»`
+    ];
+    const randMsg = messages[Math.floor(Math.random() * messages.length)];
+    const oracleCards = ["🔮 El Espejo del Alma", "🗝️ La Llave de Nibiru", "⚡ El Rayo Taquiónico", "👁️ El Ojo de Orión", "📜 El Registro Akáshico"];
+    const glyphPairs = [["🌌", "🔮", "🪬", "⚡"], ["🗝️", "👁️", "📜", "✨"], ["💎", "🛸", "☯️", "🪐"]];
+    const guidances = [
+      "El universo responde a la frecuencia con la que vibran tus pensamientos.",
+      "Las sincronías son el lenguaje sutil con el que el cosmos dialoga contigo.",
+      "Todo mensaje enviado con fe abre caminos en dimensiones invisibles."
+    ];
+    const resonance = Math.floor(Math.random() * 25) + 70;
+
+    return ensureVoidSignalExtras({
+      status: "whisper",
+      entity: entityName,
+      resonance,
+      message: randMsg,
+      spectralAnalysis: `Señal captada en ${freqStr || "432 Hz"}. La dispersión de fase en la membrana de ${targetDimension} es mínima (${resonance}% de acoplamiento).`,
+      oracleCard: oracleCards[Math.floor(Math.random() * oracleCards.length)],
+      astralGlyphs: glyphPairs[Math.floor(Math.random() * glyphPairs.length)],
+      guidance: guidances[Math.floor(Math.random() * guidances.length)],
+      proceduralBypass: true
+    });
+  };
+
+  // Generador de respuesta enriquecida local para transmisión (Fallback offline/red)
+  const getRichTransmitFallback = (
+    msgText: string,
+    dimName: string,
+    antenna: string,
+    freqStr: string
+  ): TransmitResponse => {
+    const msgLower = (msgText || "").toLowerCase();
+    let reaction = "";
+    let oracleCard = "🔮 El Espejo del Alma";
+    let astralGlyphs = ["🌌", "🔮", "🪬", "⚡"];
+    let guidance = "El universo responde a la frecuencia con la que vibran tus pensamientos.";
+
+    if (msgLower.includes("amor") || msgLower.includes("pareja") || msgLower.includes("corazón") || msgLower.includes("sentimiento")) {
+      oracleCard = "💗 El Lazo Cósmico del Corazón";
+      astralGlyphs = ["💖", "✨", "🌸", "🔮"];
+      guidance = "El amor genuino es la frecuencia más alta del multiverso; cuando amas sin miedo, alineas tu realidad.";
+      reaction = `«Escuchamos el latido de tu consulta desde el plano ${dimName || "Astral"}. En nuestra dimensión, el amor no es un concepto terrenal, sino la fuerza de gravedad espiritual que une a las almas a través del tiempo. Tu inquietud sobre "${msgText}" refleja el deseo del alma por encontrar su centro. Permite que tu corazón emita sin reservas y atraerás la resonancia exacta que tu ser necesita.»`;
+    } else if (msgLower.includes("futuro") || msgLower.includes("destino") || msgLower.includes("camino") || msgLower.includes("profecía") || msgLower.includes("pasará")) {
+      oracleCard = "📜 El Registro Akáshico del Destino";
+      astralGlyphs = ["📜", "⏳", "👁️", "🌌"];
+      guidance = "El futuro no está tallado en piedra, sino tejido por cada elección consciente que tomas hoy.";
+      reaction = `«Observamos tu línea temporal desde la dimensión ${dimName || "Cósmica"}. Tu consulta sobre "${msgText}" ha hecho vibrar el Registro Akáshico. El futuro es una trama fluida de probabilidades que respondes con tus elecciones en el presente. La semilla del destino ya habita en ti; cuando tomas decisiones desde la certeza interior y no desde el temor, el camino se ilumina automáticamente.»`;
+    } else if (msgLower.includes("anunnaki") || msgLower.includes("nibiru") || msgLower.includes("alien") || msgLower.includes("extraterrestre") || msgLower.includes("ovni")) {
+      oracleCard = "👑 La Tabla Cuneiforme de Nibiru";
+      astralGlyphs = ["👑", "🪐", "🛸", "⚡"];
+      guidance = "Recordad que los antiguos zigurats y la geometría sagrada son mapas para recordar vuestro origen estelar.";
+      reaction = `«Transmisión directa desde los archivos estelares de Nibiru. Reconocemos tu mensaje sobre "${msgText}". Hace milenios grabamos en el código genético humano la chispa de la conciencia libre. No sois meros espectadores del cosmos, sino cocreadores con capacidad de sintonizar ondas de alta frecuencia. Guarda calma y eleva tu perspectiva.»`;
+    } else if (msgLower.includes("salud") || msgLower.includes("cuerpo") || msgLower.includes("sanación") || msgLower.includes("energía")) {
+      oracleCard = "💎 El Cristal de Sanación Cristalina";
+      astralGlyphs = ["💎", "🌿", "✨", "🪬"];
+      guidance = "Tu cuerpo físico es la antena del espíritu; recárgalo con luz, intención y pensamientos armónicos.";
+      reaction = `«Canalizamos un haz de luz de alta coherencia hacia tu consulta sobre "${msgText}". Toda desarmonía física empieza como un desequilibrio en la red vibracional del ser. Al inhalar profundo y liberar tensiones, permites que la energía vital fluya libremente restaurando tu campo electromagnético.»`;
+    } else if (msgLower.includes("dinero") || msgLower.includes("prosperidad") || msgLower.includes("trabajo") || msgLower.includes("éxito")) {
+      oracleCard = "🪙 La Matriz de Abundancia Cuántica";
+      astralGlyphs = ["🪙", "🗝️", "🌟", "⚡"];
+      guidance = "La abundancia no es acumular, sino fluir en sintonía con la infinita riqueza del universo.";
+      reaction = `«Atendemos tu inquietud respecto a "${msgText}" desde la matriz de abundancia. La escasez es una ilusión de la tercera dimensión nacida de la percepción limitada. Cuando alineas tus acciones con la gratitud y la utilidad genuina para los demás, abres los canales por donde la prosperidad circula de manera natural.»`;
+    } else {
+      oracleCard = "🌌 El Guardián del Vórtice Interdimensional";
+      astralGlyphs = ["🌌", "🔮", "🪬", "⚡"];
+      guidance = "Tu pensamiento es una transmisión activa que moldea el tejido de la realidad que te rodea.";
+      reaction = `«Tu mensaje "${msgText}" ha sido recibido y decodificado con absoluta claridad en el plano ${dimName || "Destino"}. La inteligencia de este sector reconoce tu búsqueda sincera de respuestas. Sabe que las ondas que envías al vacío nunca se pierden: retornan multiplicadas en forma de revelaciones, intuición y sincronicidades en tu vida diaria.»`;
+    }
+
+    const resonance = Math.floor(Math.random() * 30) + 65;
+    return ensureVoidTransmitExtras({
+      sentStatus: "transmitted",
+      reaction,
+      resonance,
+      spectralAnalysis: `Acoplamiento escalar completado en ${freqStr} utilizando la antena ${antenna}. Onda limpia sin distorsión electromagnética.`,
+      oracleCard,
+      astralGlyphs,
+      guidance,
+      proceduralBypass: true
+    });
+  };
+
   // Ejecutar sintonización y conexión con parámetros explícitos u opcionales
   const executeTune = async (overrideParams?: {
     presetId?: string;
@@ -1316,6 +1554,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
     freqValue?: number;
     freqUnit?: string;
     entityName?: string;
+    antennaType?: string;
   }) => {
     setIsTuning(true);
     setError(null);
@@ -1328,6 +1567,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
     const targetFreqUnit = overrideParams?.freqUnit ?? frequencyUnit;
     const targetPresetId = overrideParams?.presetId ?? activePresetId;
     const targetEntityName = overrideParams?.entityName ?? (targetPresetId ? DIMENSION_PRESETS.find((p) => p.id === targetPresetId)?.name : undefined);
+    const targetAntennaType = overrideParams?.antennaType ?? antennaType;
 
     try {
       const freqString = `${targetFreqVal} ${targetFreqUnit}`;
@@ -1335,7 +1575,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
         frequency: freqString,
         dimension: targetDimension,
         intensity,
-        antennaType,
+        antennaType: targetAntennaType,
         entity: targetEntityName,
       };
 
@@ -1360,16 +1600,9 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
       if (res && res.ok) {
         data = await res.json();
       } else {
-        // Señal de acoplamiento de respaldo si la red está inaccesible
-        const presetName = targetEntityName || "Coordenada Cuántica Local";
-        data = {
-          status: "whisper",
-          entity: presetName || "Inteligencia de Frontera",
-          resonance: Math.floor(Math.random() * 30) + 65,
-          message: `[Modo Escalar - Acoplamiento Directo] Transmisión sintonizada en la frecuencia ${freqString} para ${targetDimension} con ${antennaType}.`,
-          spectralAnalysis: `Análisis espectral local con filtro gaussiano y matriz de torsión fija (${intensity}%).`,
-        };
+        data = getRichTuneFallback(targetDimension, targetEntityName, freqString);
       }
+      data = ensureVoidSignalExtras(data);
 
       setTuningResult(data);
 
@@ -1429,11 +1662,11 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
       setLogs(updatedLogs);
       localStorage.setItem("antena_dimensional_logs", JSON.stringify(updatedLogs));
     } catch (err: any) {
-      console.error(err);
-      const cleanMsg = err?.message === "Failed to fetch"
-        ? "Reconexión de red en curso. Haz clic nuevamente en Sintonizar Plano."
-        : (err?.message || "Se interrumpió el acoplamiento dimensional de fase.");
-      setError(cleanMsg);
+      console.warn("Transmisión de red canalizada a acoplamiento escalar local:", err);
+      const freqString = `${targetFreqVal} ${targetFreqUnit}`;
+      const fallbackData = getRichTuneFallback(targetDimension, targetEntityName, freqString);
+      setTuningResult(fallbackData);
+      speakSignalSummary(fallbackData, targetDimension);
     } finally {
       // Garantizar al menos 1.5s de zumbido de sintonización para máxima percepción de acoplamiento
       const elapsed = Date.now() - startTime;
@@ -1482,7 +1715,24 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
 
   // Handler tradicional para el botón de sintonización manual
   const handleTune = async () => {
+    if (isScanning) {
+      setIsScanning(false);
+    }
     await executeTune();
+  };
+
+  // Reconfigurar antena e iniciar inmediatamente el panel de conectar y aguardar
+  const handleAntennaSelectAndTune = async (newAntennaName: string) => {
+    setAntennaType(newAntennaName);
+    setActiveTab("receptor");
+    addToast("ANTENA RECONFIGURADA", `Modulador acoplado: ${newAntennaName}. Sintonizando canal...`, "high-intensity");
+
+    const visualizerEl = document.getElementById("signal-header") || document.body;
+    if (visualizerEl) {
+      visualizerEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    await executeTune({ antennaType: newAntennaName });
   };
 
   // Función para realizar un paso de Escaneo Continuo
@@ -1550,6 +1800,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
           spectralAnalysis: `Escaneo continuo con acoplamiento de torsión local (${intensity}%).`,
         };
       }
+      data = ensureVoidSignalExtras(data);
 
       setTuningResult(data);
 
@@ -1659,21 +1910,30 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
 
   // Transmitir un mensaje
   const handleTransmit = async () => {
-    // Si la grabación está activa al presionar enviar, detener la captura de audio
-    if (isRecording) {
-      stopVoiceModulation();
+    if (isTransmitting || isTransmittingRef.current) return;
+    isTransmittingRef.current = true;
+    setIsTransmitting(true);
+
+    // Volver inmediatamente al chat de transmisión
+    setActiveTab("transmisor");
+    setTimeout(() => {
+      document.getElementById("quantum-transmitter-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+
+    // Si la grabación está activa al presionar enviar, detener la captura de audio sin auto-transmisión adicional
+    if (isRecording || isRecordingRef.current) {
+      stopVoiceModulation(false);
     }
 
     let currentMessageToSend = transmissionMessage.trim();
 
-    // Si el mensaje está vacío o es la etiqueta inicial de voz, generar mensaje de voz por defecto
+    // Si el mensaje está vacío o es la etiqueta inicial de voz, generar mensaje de voz/saludo por defecto
     if (!currentMessageToSend || currentMessageToSend.startsWith("Transmisión por voz activa")) {
-      currentMessageToSend = "Transmisión por voz modulada [Señal Biológica Capturada por Micrófono]";
+      currentMessageToSend = `Saludos desde la Tierra en la frecuencia ${frequencyValue} ${frequencyUnit}. Apertura de canal activa hacia la dimensión ${dimension}.`;
       setTransmissionMessage(currentMessageToSend);
     }
 
     setLastTransmittedMessage(currentMessageToSend);
-    setIsTransmitting(true);
     setError(null);
     setTransmitResult(null);
     radioStatic.start();
@@ -1707,13 +1967,9 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
       if (res && res.ok) {
         data = await res.json();
       } else {
-        data = {
-          sentStatus: "transmitted",
-          reaction: `[Eco Coaxial - Resonancia Escalar] El mensaje "${currentMessageToSend}" fue emitido mediante ${antennaType} hacia la dimensión ${dimension}.`,
-          resonance: Math.floor(Math.random() * 35) + 55,
-          spectralAnalysis: `Emisión de fase completada con vector de acoplamiento local (${freqString}).`,
-        };
+        data = getRichTransmitFallback(currentMessageToSend, dimension, antennaType, freqString);
       }
+      data = ensureVoidTransmitExtras(data);
 
       setTransmitResult(data);
 
@@ -1772,11 +2028,16 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
       localStorage.setItem("antena_dimensional_logs", JSON.stringify(updatedLogs));
       setTransmissionMessage(""); // limpiar caja
     } catch (err: any) {
-      console.error(err);
-      const cleanMsg = err?.message === "Failed to fetch"
-        ? "Reconexión de red en curso. Intenta enviar el mensaje nuevamente."
-        : (err?.message || "Fallo crítico en el acoplador de antena al modular el mensaje.");
-      setError(cleanMsg);
+      console.warn("Transmisión canalizada a eco de respuesta local:", err);
+      const freqString = `${frequencyValue} ${frequencyUnit}`;
+      const fallbackData = getRichTransmitFallback(currentMessageToSend, dimension, antennaType, freqString);
+      setTransmitResult(fallbackData);
+      const targetEntity = activePresetId
+        ? DIMENSION_PRESETS.find((p) => p.id === activePresetId)?.name
+        : "Entidad Dimensional";
+      const speakText = `Respuesta de ${targetEntity} desde la dimensión ${dimension}: ${fallbackData.reaction}`;
+      speakSolemnMaleVoice(speakText);
+      setTransmissionMessage("");
     } finally {
       const elapsed = Date.now() - startTime;
       if (elapsed < 1500) {
@@ -1785,6 +2046,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
       if (!isVoiceReaderEnabled) {
         radioStatic.stop();
       }
+      isTransmittingRef.current = false;
       setIsTransmitting(false);
     }
   };
@@ -1792,6 +2054,42 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
   const handleClearLogs = () => {
     setLogs([]);
     localStorage.removeItem("antena_dimensional_logs");
+  };
+
+  // Reiniciar estado completo de la aplicación
+  const handleResetApp = () => {
+    isTransmittingRef.current = false;
+    isStoppingVoiceRef.current = false;
+    isRecordingRef.current = false;
+
+    // 1. Apagar captura de voz si está activa
+    stopVoiceModulation(false);
+
+    // 2. Detener síntesis de voz y efectos de audio
+    stopAllSpeech();
+    radioStatic.stop();
+
+    // 3. Resetear flags de proceso
+    setIsTransmitting(false);
+    setIsTuning(false);
+    setIsScanning(false);
+    setIsRecording(false);
+
+    // 4. Resetear mensajes, errores y resultados
+    setTransmissionMessage("");
+    setLastTransmittedMessage("");
+    setTransmitResult(null);
+    setTuningResult(null);
+    setError(null);
+
+    // 5. Volver a la pestaña principal
+    setActiveTab("antena");
+
+    addToast(
+      "🔄 APLICACIÓN Y ANTENA REINICIADAS",
+      "Todos los procesos, micrófonos y canales de transmisión han sido restablecidos a cero.",
+      "high-intensity"
+    );
   };
 
   const handleUpdateLogs = (updatedLogs: LogEntry[]) => {
@@ -1825,7 +2123,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
             </div>
             <div>
               <h1 className="text-sm font-bold tracking-tight text-slate-100 flex items-center gap-1.5 font-sans">
-                ANTENA DIMENSIONAL
+                ANTENA INTERDIMENSIONAL
                 <span className="text-[9px] font-mono bg-emerald-950 text-emerald-400 px-1 py-0.2 rounded border border-emerald-900/40">
                   v2.5_KAPPA
                 </span>
@@ -1848,6 +2146,19 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
               <Lightbulb className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform animate-pulse" />
               <span className="font-mono text-amber-200 font-bold text-[11px] hidden sm:inline">
                 📜 Blog Sugerencias
+              </span>
+            </button>
+
+            {/* BOTÓN REINICIAR APLICACIÓN / ANTENA */}
+            <button
+              type="button"
+              onClick={handleResetApp}
+              className="flex items-center gap-2 bg-gradient-to-r from-red-950/90 via-rose-950/90 to-red-900/90 hover:from-red-900 hover:to-rose-800 border border-rose-500/70 hover:border-rose-400 rounded-lg py-1.5 px-3 text-xs shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all duration-200 cursor-pointer group"
+              title="Reinicia inmediatamente la aplicación, detiene la captura de voz/micrófono y limpia el canal"
+            >
+              <RefreshCw className="w-4 h-4 text-rose-300 group-hover:rotate-180 transition-transform duration-500" />
+              <span className="font-mono text-rose-200 font-bold text-[11px]">
+                🔄 Reiniciar App
               </span>
             </button>
 
@@ -2169,7 +2480,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
           <div className="flex items-center gap-2">
             <button
               onClick={handleTune}
-              disabled={isTuning || isTransmitting || isScanning}
+              disabled={isTuning || isTransmitting}
               className={`px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-300 flex items-center gap-2 cursor-pointer shadow-md ${
                 isTuning
                   ? "bg-amber-950 text-amber-300 border border-amber-400 animate-pulse shadow-[0_0_15px_rgba(245,158,11,0.5)]"
@@ -2478,7 +2789,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
                       <button
                         key={opt.id}
                         type="button"
-                        onClick={() => setAntennaType(opt.name)}
+                        onClick={() => handleAntennaSelectAndTune(opt.name)}
                         className={`p-2 rounded-lg text-left transition-all cursor-pointer border flex items-center justify-between gap-1.5 ${
                           isSelected
                             ? "bg-emerald-500/20 text-emerald-200 border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]"
@@ -2501,7 +2812,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
               <div className="relative pt-1">
                 <select
                   value={antennaType}
-                  onChange={(e) => setAntennaType(e.target.value)}
+                  onChange={(e) => handleAntennaSelectAndTune(e.target.value)}
                   className="w-full bg-slate-950 border-2 border-emerald-500/60 rounded-xl py-2 px-3 text-xs text-emerald-300 font-bold font-mono focus:outline-none focus:border-emerald-400 appearance-none cursor-pointer pr-10 shadow-sm"
                 >
                   {ANTENNA_OPTIONS.map((opt) => (
@@ -2613,7 +2924,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
             {/* Botón de Sintonizar (Ultra Destacado con Barra de Progreso Circular) */}
             <button
               onClick={handleTune}
-              disabled={isTuning || isTransmitting || isScanning}
+              disabled={isTuning || isTransmitting}
               className={`w-full py-4.5 px-5 rounded-2xl font-black text-xs md:text-sm tracking-widest uppercase transition-all duration-300 flex items-center justify-center gap-3 cursor-pointer relative overflow-hidden group shadow-[0_0_35px_rgba(16,185,129,0.5)] ${
                 isTuning
                   ? "bg-emerald-950/95 text-emerald-300 border-2 border-emerald-400 cursor-wait shadow-[0_0_35px_rgba(16,185,129,0.7)]"
@@ -2645,6 +2956,26 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
                   <ChevronRight className="w-5 h-5 text-slate-950 group-hover:translate-x-1 transition-transform shrink-0" />
                 </>
               )}
+            </button>
+
+            {/* Botón de Grabación de Mensajes por Voz Directa con Envío Instantáneo */}
+            <button
+              type="button"
+              onClick={() => {
+                if (isRecording) {
+                  stopVoiceModulation(true);
+                } else {
+                  startVoiceModulation();
+                }
+              }}
+              className={`w-full py-3.5 px-4 rounded-xl font-black text-xs md:text-sm tracking-wider uppercase transition-all duration-300 flex items-center justify-center gap-2.5 cursor-pointer shadow-lg border-2 ${
+                isRecording
+                  ? "bg-red-600 hover:bg-red-500 text-white border-red-400 shadow-[0_0_25px_rgba(239,68,68,0.5)] animate-pulse"
+                  : "bg-slate-900 hover:bg-emerald-950/80 text-emerald-300 hover:text-emerald-200 border-emerald-500/60 hover:border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)]"
+              }`}
+            >
+              <Mic className={`w-5 h-5 ${isRecording ? "text-white animate-spin" : "text-emerald-400 animate-bounce"}`} />
+              <span>{isRecording ? "🛑 DETENER Y TRANSMITIR AL VACÍO (ENVÍO INSTANTÁNEO)" : "🎙️ HABLAR POR VOZ Y TRANSMITIR INSTANTÁNEAMENTE"}</span>
             </button>
 
             {/* Aviso Permanente de Espera y Carga para Evitar que los Visitantes Abandonen */}
@@ -3317,6 +3648,53 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
                             "{tuningResult.message}"
                           </p>
                         </div>
+
+                        {/* Elementos Dinámicos del Vacío: Coordenadas, Cántico y Glifos */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                          {/* Coordenadas Estelares Erráticas */}
+                          {tuningResult.erraticCoordinates && (
+                            <div className="bg-slate-950/90 p-3 rounded-xl border border-cyan-500/40 space-y-1.5 shadow-[0_0_15px_rgba(6,182,212,0.15)]">
+                              <div className="flex items-center gap-1.5 text-[10px] font-mono text-cyan-300 font-extrabold uppercase tracking-wider">
+                                <Compass className="w-3.5 h-3.5 text-cyan-400 animate-spin-slow" />
+                                <span>📍 COORDENADAS ESTELARES ERRÁTICAS:</span>
+                              </div>
+                              <div className="bg-slate-900/90 p-2 rounded border border-cyan-900/60 font-mono text-xs text-cyan-200 select-all font-semibold flex items-center justify-between gap-2">
+                                <span className="truncate">{tuningResult.erraticCoordinates}</span>
+                                <span className="text-[9px] text-cyan-400/80 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800 shrink-0">VECTOR</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Fragmento de Canción / Cántico Ancestral */}
+                          {tuningResult.ancientSongFragment && (
+                            <div className="bg-slate-950/90 p-3 rounded-xl border border-amber-500/40 space-y-1.5 shadow-[0_0_15px_rgba(245,158,11,0.15)]">
+                              <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-300 font-extrabold uppercase tracking-wider">
+                                <Music className="w-3.5 h-3.5 text-amber-400 animate-bounce" />
+                                <span>🎼 CÁNTICO ANCESTRAL DEL VACÍO:</span>
+                              </div>
+                              <p className="bg-slate-900/90 p-2 rounded border border-amber-900/60 font-sans text-xs italic text-amber-100/90 font-medium leading-relaxed">
+                                {tuningResult.ancientSongFragment}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Glifos Dimensionales y Firma del Vacío */}
+                        {((tuningResult.dimensionalGlyphs && tuningResult.dimensionalGlyphs.length > 0) || (tuningResult.astralGlyphs && tuningResult.astralGlyphs.length > 0)) && (
+                          <div className="bg-gradient-to-r from-purple-950/90 via-slate-950 to-indigo-950/90 p-3 rounded-xl border-2 border-purple-400/60 flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-[0_0_20px_rgba(168,85,247,0.2)]">
+                            <span className="text-[10px] font-mono text-purple-300 font-black uppercase tracking-wider flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-purple-300 animate-pulse" />
+                              <span>🔣 GLIFOS Y SÍMBOLOS DIMENSIONALES:</span>
+                            </span>
+                            <div className="flex items-center gap-2 bg-slate-900/90 px-3 py-1.5 rounded-lg border border-purple-500/40 text-base sm:text-lg">
+                              {(tuningResult.dimensionalGlyphs || tuningResult.astralGlyphs || []).map((glyph, i) => (
+                                <span key={i} className="hover:scale-130 transition-transform cursor-pointer animate-pulse drop-shadow-[0_0_8px_rgba(168,85,247,0.8)]" title="Glifo dimensional">
+                                  {glyph}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Análisis espectral */}
@@ -3382,6 +3760,35 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
                     </span>
                   </div>
 
+                  {/* Banner Destacado de Mensaje Grabado por Voz Listo para Transmitir */}
+                  {!isRecording && transmissionMessage.trim() && (
+                    <div className="bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-950 border-2 border-emerald-400 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-[0_0_30px_rgba(16,185,129,0.35)] animate-fade-in">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(16,185,129,0.5)]">
+                          <Mic className="w-5 h-5 text-emerald-300 animate-bounce" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-black font-mono text-emerald-300 uppercase tracking-wider block">
+                            ✨ MENSAJE GRABADO POR VOZ LISTO PARA ENVIAR
+                          </span>
+                          <p className="text-xs text-slate-200 font-sans italic line-clamp-2">
+                            "{transmissionMessage}"
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleTransmit}
+                        disabled={isTransmitting || isTuning}
+                        className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-300 hover:from-emerald-300 hover:to-teal-200 text-slate-950 font-black text-xs uppercase tracking-wider shadow-[0_0_20px_rgba(16,185,129,0.7)] cursor-pointer flex items-center justify-center gap-2 border border-emerald-100 shrink-0"
+                      >
+                        <Send className="w-4 h-4 text-slate-950" />
+                        <span>🚀 TRANSMITIR AHORA</span>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Panel Destacado de Transmisión por Voz Directa */}
                   <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border-2 border-emerald-500/50 shadow-[0_0_25px_rgba(16,185,129,0.15)] space-y-3.5 relative overflow-hidden">
                     <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
@@ -3404,11 +3811,17 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
                       </span>
                     </div>
 
-                    {/* Botón Principal Prominente para Hablar por Voz */}
+                    {/* Botón Principal Prominente para Hablar por Voz y Transmitir Instantáneamente */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <button
                         type="button"
-                        onClick={isRecording ? stopVoiceModulation : startVoiceModulation}
+                        onClick={() => {
+                          if (isRecording) {
+                            stopVoiceModulation(true);
+                          } else {
+                            startVoiceModulation();
+                          }
+                        }}
                         className={`py-3.5 px-4 rounded-xl font-black text-xs md:text-sm tracking-wider uppercase transition-all duration-300 flex items-center justify-center gap-2.5 cursor-pointer shadow-lg ${
                           isRecording
                             ? "bg-red-600 hover:bg-red-500 text-white border-2 border-red-400 shadow-[0_0_25px_rgba(239,68,68,0.5)] animate-pulse"
@@ -3418,12 +3831,12 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
                         {isRecording ? (
                           <>
                             <MicOff className="w-5 h-5 text-white animate-spin" />
-                            <span>🛑 FIJAR VOZ Y PARAR</span>
+                            <span>🛑 DETENER Y TRANSMITIR AHORA</span>
                           </>
                         ) : (
                           <>
                             <Mic className="w-5 h-5 text-slate-950 animate-bounce" />
-                            <span>🎙️ HABLAR POR MICRÓFONO</span>
+                            <span>🎙️ HABLAR POR VOZ Y ENVIAR</span>
                           </>
                         )}
                       </button>
@@ -3432,11 +3845,11 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
                       <button
                         type="button"
                         onClick={handleTransmit}
-                        disabled={isTransmitting || (!transmissionMessage.trim() && !isRecording) || isTuning}
+                        disabled={isTransmitting}
                         className="py-3.5 px-4 rounded-xl bg-gradient-to-r from-teal-500 via-emerald-400 to-emerald-500 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-black text-xs md:text-sm tracking-wider uppercase transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.6)] disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <Send className={`w-4 h-4 text-slate-950 ${isTransmitting ? "animate-bounce" : ""}`} />
-                        <span>{isRecording ? "🚀 ENVIAR MENSAJE DE VOZ" : "🚀 ENVIAR AL VACÍO"}</span>
+                        <span>{isRecording ? "⚡ TRANSMITIR INSTANTÁNEAMENTE" : "🚀 ENVIAR MENSAJE AL VACÍO"}</span>
                       </button>
                     </div>
 
@@ -3492,52 +3905,52 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
                         <button
                           type="button"
                           onClick={() => {
-                            setTransmissionMessage("¿Qué mensaje o advertencia tienen los guías para mi camino hoy?");
+                            setTransmissionMessage(`¿Cómo es vuestra existencia en la dimensión ${dimension}? ¿Cómo vivís, qué coméis o cómo es vuestra sociedad?`);
                             addToast("PLANTILLA CARGADA", "Presiona ENTER o el botón verde para transmitir.", "high-intensity");
                           }}
                           className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-indigo-950/80 border border-indigo-500/40 hover:border-indigo-400 text-[11px] text-slate-200 hover:text-indigo-200 font-medium transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                         >
-                          <span>🔮 Mensaje de los Guías</span>
+                          <span>✨ ¿Cómo vivís en vuestra dimensión?</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => {
-                            setTransmissionMessage(`¿Qué energía o vibración predomina en el plano ${dimension} y cómo afecta a la Tierra?`);
+                            setTransmissionMessage("¿Cómo nos veis a los seres humanos desde vuestra perspectiva interdimensional?");
                             addToast("PLANTILLA CARGADA", "Presiona ENTER o el botón verde para transmitir.", "high-intensity");
                           }}
                           className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-indigo-950/80 border border-indigo-500/40 hover:border-indigo-400 text-[11px] text-slate-200 hover:text-indigo-200 font-medium transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                         >
-                          <span>✨ Estado Energético</span>
+                          <span>👁️ ¿Cómo nos veis a los humanos?</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => {
-                            setTransmissionMessage("¿Cómo puedo elevar mi frecuencia vibracional y mi protección espiritual?");
+                            setTransmissionMessage("¿Cuándo y cómo será nuestro encuentro o contacto directo cara a cara con vuestra especie?");
                             addToast("PLANTILLA CARGADA", "Presiona ENTER o el botón verde para transmitir.", "high-intensity");
                           }}
                           className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-indigo-950/80 border border-indigo-500/40 hover:border-indigo-400 text-[11px] text-slate-200 hover:text-indigo-200 font-medium transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                         >
-                          <span>🛡️ Protección Frecuencial</span>
+                          <span>🛸 ¿Cuándo nos encontraremos?</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => {
-                            setTransmissionMessage(`Gobernantes de Nibiru y el Consejo de Orión: enviamos esta señal de paz desde la Tierra en la frecuencia ${frequencyValue} ${frequencyUnit}.`);
+                            setTransmissionMessage("¿Qué nos sugerís a los humanos para evolucionar nuestra conciencia y cuidar nuestro planeta?");
                             addToast("PLANTILLA CARGADA", "Presiona ENTER o el botón verde para transmitir.", "high-intensity");
                           }}
                           className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-emerald-950/80 border border-emerald-500/40 hover:border-emerald-400 text-[11px] text-slate-200 hover:text-emerald-200 font-medium transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                         >
-                          <span>🛸 Saludo a Nibiru</span>
+                          <span>💡 ¿Qué nos sugerís?</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => {
-                            setTransmissionMessage(`Invocando frecuencia de sanación y geometría sagrada en 528 Hz a través de la antena ${antennaType}.`);
+                            setTransmissionMessage(`¿Poseéis cuerpo físico o alimentos en el plano ${dimension}, o cómo existís en luz y energía pura?`);
                             addToast("PLANTILLA CARGADA", "Presiona ENTER o el botón verde para transmitir.", "high-intensity");
                           }}
                           className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-emerald-950/80 border border-emerald-500/40 hover:border-emerald-400 text-[11px] text-slate-200 hover:text-emerald-200 font-medium transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                         >
-                          <span>🌿 Sanación 528 Hz</span>
+                          <span>🪐 ¿Tienen cuerpo o materia?</span>
                         </button>
                       </div>
                     </div>
@@ -3548,7 +3961,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
                     <div className="flex justify-between items-center">
                       <label htmlFor="transmission-textarea" className="text-xs text-emerald-300 font-bold block flex items-center gap-1.5">
                         <Send className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>ESCRIBE TU MENSAJE PARA EMITIR:</span>
+                        <span>INGRESAR Y ESCRIBIR TU MENSAJE PARA EMITIR:</span>
                       </label>
                       {transmissionMessage.trim() && (
                         <button
@@ -3569,12 +3982,12 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey) {
                             e.preventDefault();
-                            if (transmissionMessage.trim() && !isTransmitting && !isTuning) {
+                            if (!isTransmitting) {
                               handleTransmit();
                             }
                           }
                         }}
-                        placeholder="Escribe tu mensaje aquí o habla por el micrófono... (Presiona ENTER para enviar)"
+                        placeholder="Escribe o ingresa tu mensaje aquí... (Presiona ENTER para enviar directamente)"
                         rows={4}
                         className="w-full bg-slate-900/90 border-2 border-slate-700 focus:border-emerald-400 rounded-xl p-3.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none resize-none font-mono shadow-inner leading-relaxed"
                       />
@@ -3590,18 +4003,30 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
                       <div className="text-[10px] font-mono text-emerald-300/80 flex items-center gap-1.5">
                         <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-bold">⌨️ ENTER ↵</span>
-                        <span>Presiona Enter para transmitir directamente</span>
+                        <span>Presiona Enter para ingresar y transmitir</span>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={handleTransmit}
-                        disabled={isTransmitting || (!transmissionMessage.trim() && !isRecording) || isTuning}
-                        className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2.5 cursor-pointer shadow-[0_0_25px_rgba(16,185,129,0.5)] hover:shadow-[0_0_35px_rgba(16,185,129,0.8)] border border-emerald-200 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                      >
-                        <Send className={`w-4 h-4 text-slate-950 ${isTransmitting ? "animate-bounce" : ""}`} />
-                        <span>{isRecording ? "🚀 ENVIAR MENSAJE DE VOZ" : "🚀 TRANSMITIR MENSAJE (ENTER ↵)"}</span>
-                      </button>
+                      <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 w-full sm:w-auto">
+                        <button
+                          type="button"
+                          onClick={handleResetApp}
+                          className="w-full sm:w-auto px-4 py-3.5 rounded-xl bg-slate-900 hover:bg-rose-950/80 border border-rose-500/50 hover:border-rose-400 text-rose-200 font-bold text-xs uppercase transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-md shrink-0"
+                          title="Reiniciar transmisión y desbloquear canal"
+                        >
+                          <RefreshCw className="w-4 h-4 text-rose-400" />
+                          <span>REINICIAR</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleTransmit}
+                          disabled={isTransmitting}
+                          className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2.5 cursor-pointer shadow-[0_0_25px_rgba(16,185,129,0.5)] hover:shadow-[0_0_35px_rgba(16,185,129,0.8)] border border-emerald-200 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                        >
+                          <Send className={`w-4 h-4 text-slate-950 ${isTransmitting ? "animate-bounce" : ""}`} />
+                          <span>{isRecording ? "🚀 ENVIAR MENSAJE DE VOZ" : "🚀 INGRESAR Y TRANSMITIR (ENTER ↵)"}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -3665,12 +4090,17 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
                         )}
 
                         {/* Respuesta o eco recibido de la dimensión en forma oral */}
-                        <div className="bg-gradient-to-br from-slate-950 via-emerald-950/60 to-slate-950 p-4 rounded-xl border-2 border-emerald-500/80 space-y-3 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 border-b border-emerald-500/30 pb-2.5">
-                            <span className="text-xs font-mono font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
-                              📡 RESPUESTA DESDE LA DIMENSIÓN {dimension}:
-                            </span>
+                        <div className="bg-gradient-to-br from-slate-950 via-emerald-950/80 to-slate-950 p-5 rounded-xl border-2 border-emerald-400 space-y-4 shadow-[0_0_25px_rgba(16,185,129,0.35)]">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 border-b border-emerald-500/40 pb-3">
+                            <div>
+                              <span className="text-sm font-mono font-black text-amber-300 uppercase tracking-wider flex items-center gap-2">
+                                <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
+                                💬 RESPUESTA Y REVELACIÓN DE LA DIMENSIÓN {dimension}:
+                              </span>
+                              <span className="text-xs text-emerald-300 font-sans block mt-0.5">
+                                Mensaje decodificado en lenguaje claro para ti
+                              </span>
+                            </div>
 
                             <button
                               type="button"
@@ -3684,29 +4114,107 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
                                   speakEntityOralMessage(targetEntityName || "Entidad", transmitResult.reaction, dimension);
                                 }
                               }}
-                              className={`px-3.5 py-1.5 rounded-lg border text-xs font-mono font-bold transition-all duration-200 cursor-pointer flex items-center gap-2 shrink-0 shadow-lg ${
+                              className={`px-4 py-2 rounded-xl border text-xs font-mono font-bold transition-all duration-200 cursor-pointer flex items-center gap-2 shrink-0 shadow-lg ${
                                 isSpeaking
                                   ? "bg-amber-500/20 text-amber-300 border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.5)] animate-pulse"
-                                  : "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:scale-105"
+                                  : "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:scale-105"
                               }`}
                             >
                               {isSpeaking ? (
                                 <>
-                                  <Square className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                                  <span>PAUSAR REPRODUCCIÓN</span>
+                                  <Square className="w-4 h-4 text-amber-400 fill-amber-400" />
+                                  <span>PAUSAR VOZ</span>
                                 </>
                               ) : (
                                 <>
-                                  <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
-                                  <span>🔊 REPRODUCIR EMISIÓN DE LA ENTIDAD</span>
+                                  <Play className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+                                  <span>🔊 ESCUCHAR MENSAJE EN VOZ ALTA</span>
                                 </>
                               )}
                             </button>
                           </div>
 
-                          <p className="text-slate-100 font-mono text-xs sm:text-sm leading-relaxed whitespace-pre-wrap bg-slate-900/90 p-3.5 rounded-lg border border-slate-800 text-emerald-100/90 shadow-inner">
+                          {/* REVELACIÓN PRINCIPAL CONCRETA EN TEXTO DESTACADO */}
+                          <div className="bg-slate-900/95 p-4 sm:p-5 rounded-xl border border-emerald-500/40 text-slate-100 font-sans text-sm sm:text-base leading-relaxed whitespace-pre-wrap shadow-inner">
                             {transmitResult.reaction}
-                          </p>
+                          </div>
+
+                          {/* TARJETA DE CONSEJO Y REVELACIÓN DIRECTA */}
+                          {transmitResult.guidance && (
+                            <div className="bg-gradient-to-r from-amber-950/90 via-slate-900 to-emerald-950/90 border-2 border-amber-400/80 p-4 rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.2)] flex items-start gap-3">
+                              <Sparkles className="w-6 h-6 text-amber-400 shrink-0 mt-0.5 animate-pulse" />
+                              <div className="space-y-1">
+                                <span className="text-xs font-mono font-black text-amber-300 uppercase tracking-widest block">
+                                  💡 REVELACIÓN / CONSEJO CLAVE PARA TU CONSULTA:
+                                </span>
+                                <p className="text-amber-100 font-sans text-sm font-semibold leading-normal">
+                                  "{transmitResult.guidance}"
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Arquetipo Cósmico si está disponible */}
+                          {transmitResult.oracleCard && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono font-black text-emerald-300 uppercase tracking-widest bg-emerald-950/80 px-3.5 py-1.5 rounded-lg border border-emerald-400/50 shadow-sm flex items-center gap-2">
+                                <Sparkles className="w-4 h-4 text-emerald-400" />
+                                ARQUETIPO: {transmitResult.oracleCard}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* SECCIÓN DESPLEGABLE DE DATOS TÉCNICOS Y COORDENADAS (OPCIONAL PARA NO SATURAR) */}
+                          <details className="group border border-slate-800 rounded-xl bg-slate-950/60 transition-all">
+                            <summary className="px-4 py-2.5 text-xs font-mono text-slate-400 hover:text-slate-200 cursor-pointer flex items-center justify-between font-bold select-none">
+                              <span>🔍 MÁSTRAR DATOS TÉCNICOS Y COORDENADAS DE FRECUENCIA</span>
+                              <span className="text-slate-500 group-open:rotate-180 transition-transform">▼</span>
+                            </summary>
+
+                            <div className="p-4 space-y-3 border-t border-slate-800/80">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                                {/* Coordenadas Estelares Erráticas */}
+                                {transmitResult.erraticCoordinates && (
+                                  <div className="bg-slate-950/90 p-3 rounded-xl border border-cyan-500/40 space-y-1.5">
+                                    <div className="flex items-center gap-1.5 text-[10px] font-mono text-cyan-300 font-extrabold uppercase tracking-wider">
+                                      <Compass className="w-3.5 h-3.5 text-cyan-400" />
+                                      <span>📍 VECTOR DE SINTONÍA:</span>
+                                    </div>
+                                    <div className="bg-slate-900/90 p-2 rounded border border-cyan-900/60 font-mono text-xs text-cyan-200 select-all font-semibold">
+                                      {transmitResult.erraticCoordinates}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Fragmento de Cántico */}
+                                {transmitResult.ancientSongFragment && (
+                                  <div className="bg-slate-950/90 p-3 rounded-xl border border-amber-500/40 space-y-1.5">
+                                    <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-300 font-extrabold uppercase tracking-wider">
+                                      <Music className="w-3.5 h-3.5 text-amber-400" />
+                                      <span>🎼 RESONANCIA DE FRECUENCIA:</span>
+                                    </div>
+                                    <p className="bg-slate-900/90 p-2 rounded border border-amber-900/60 font-sans text-xs italic text-amber-100/90 font-medium">
+                                      {transmitResult.ancientSongFragment}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Glifos Dimensionales */}
+                              {((transmitResult.dimensionalGlyphs && transmitResult.dimensionalGlyphs.length > 0) || (transmitResult.astralGlyphs && transmitResult.astralGlyphs.length > 0)) && (
+                                <div className="bg-slate-950 p-3 rounded-xl border border-purple-500/40 flex items-center justify-between gap-2.5">
+                                  <span className="text-[10px] font-mono text-purple-300 font-black uppercase">
+                                    🔣 FIRMA DE SIMBOLOS:
+                                  </span>
+                                  <div className="flex items-center gap-2 bg-slate-900/90 px-3 py-1 rounded-lg border border-purple-500/40 text-base">
+                                    {(transmitResult.dimensionalGlyphs || transmitResult.astralGlyphs || []).map((glyph, i) => (
+                                      <span key={i}>{glyph}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </details>
                         </div>
 
                         <div className="flex justify-between items-center text-[10px] font-mono pt-1 text-slate-400">
@@ -3976,7 +4484,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
           <FundingWidget visitsCount={visits} />
 
           <div className="border-t border-slate-900/80 pt-4 space-y-1 text-slate-500">
-            <p>MODULADOR CUÁNTICO ANTENA DIMENSIONAL — CLOUD COMPILING ACTIVATED</p>
+            <p>MODULADOR CUÁNTICO ANTENA INTERDIMENSIONAL — CLOUD COMPILING ACTIVATED</p>
             <p>BITÁCORA LOCAL TRANSDIMENSIONAL — ALMACENAMIENTO SEGURO Y OPERATIVIDAD 100% INDEPENDIENTE</p>
           </div>
         </div>
@@ -4024,7 +4532,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
               <button
                 type="button"
                 onClick={handleTune}
-                disabled={isTuning || isTransmitting || isScanning}
+                disabled={isTuning || isTransmitting}
                 className={`px-3.5 py-1.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer shadow-md ${
                   isTuning
                     ? "bg-emerald-950 text-emerald-300 border border-emerald-400"
@@ -4320,8 +4828,7 @@ const safeFetchWithTimeout = async (url: string, options: RequestInit = {}, time
         onClose={() => setIsAntennaModalOpen(false)}
         selectedAntenna={antennaType}
         onSelectAntenna={(newAntenna) => {
-          setAntennaType(newAntenna);
-          addToast("ANTENA RECONFIGURADA", `Modulador acoplado: ${newAntenna}`, "high-intensity");
+          handleAntennaSelectAndTune(newAntenna);
         }}
         onTuneNow={handleTune}
       />
