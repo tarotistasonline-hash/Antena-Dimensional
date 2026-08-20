@@ -893,8 +893,18 @@ Devuelve ÚNICAMENTE el objeto JSON válido.
   }
 });
 
+// Google Site Verification Endpoint
+app.get("/googlee814d7c05b3fbac6.html", (req, res) => {
+  res.type("text/html").send("google-site-verification: googlee814d7c05b3fbac6.html\n");
+});
+
 // Vite Setup for Development and static build for Production
 async function startServer() {
+  const publicPath = path.join(process.cwd(), "public");
+  if (fs.existsSync(publicPath)) {
+    app.use(express.static(publicPath));
+  }
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: false },
