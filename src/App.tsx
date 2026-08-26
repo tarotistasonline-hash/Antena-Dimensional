@@ -46,20 +46,13 @@ import {
 import { DimensionPreset, LogEntry, SignalResponse, TransmitResponse } from "./types";
 import { DIMENSION_PRESETS } from "./presets";
 import {
-  initMixpanel,
-  trackEvent,
-  getMixpanelToken,
-  saveMixpanelToken,
-  isMixpanelInitialized,
-  getDistinctId,
-  isOperatorExcluded,
-  setOperatorExcluded,
-  fetchMixpanelLogs,
-} from "./mixpanel";
-import {
-  getCloudVisits,
-  registerCloudVisit,
-  setManualCount as setCloudManualCount,
+  getStoredVisits,
+  registerUniversalVisit,
+  setUniversalVisits,
+  getLocalTelemetryLogs,
+  logTelemetryEvent,
+  getDeviceInfo,
+  TelemetryEvent,
 } from "./cloudCounter";
 import SignalVisualizer from "./components/SignalVisualizer";
 import DirectoryList from "./components/DirectoryList";
@@ -73,6 +66,7 @@ import AmbientAudioEqualizer from "./components/AmbientAudioEqualizer";
 import { TransmissionWaveVisualizer } from "./components/TransmissionWaveVisualizer";
 import { CircularProgressRing } from "./components/CircularProgressRing";
 import { SuggestionsBlogModal } from "./components/SuggestionsBlogModal";
+import { TelemetryModal } from "./components/TelemetryModal";
 import { StellarParticlesCanvas } from "./components/StellarParticlesCanvas";
 import { DimensionalJumpOverlay } from "./components/DimensionalJumpOverlay";
 import { radioStatic } from "./radioStatic";
@@ -185,13 +179,17 @@ export default function App() {
     }
   }, []);
   const [customVisitsInput, setCustomVisitsInput] = useState<string>("");
-  const [isMixpanelModalOpen, setIsMixpanelModalOpen] = useState(false);
+  const [isTelemetryModalOpen, setIsTelemetryModalOpen] = useState(false);
   const [isSuggestionsModalOpen, setIsSuggestionsModalOpen] = useState(false);
-  const [mixpanelTokenInput, setMixpanelTokenInput] = useState(() => getMixpanelToken());
-  const [isMixpanelConnected, setIsMixpanelConnected] = useState(() => isMixpanelInitialized());
-  const [isExcludedOperator, setIsExcludedOperator] = useState<boolean>(() => isOperatorExcluded());
-  const [mixpanelLogsList, setMixpanelLogsList] = useState<any[]>([]);
-  const [isSavingMixpanelToken, setIsSavingMixpanelToken] = useState(false);
+  const [isExcludedOperator, setIsExcludedOperator] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("owner") === "true") return true;
+      return localStorage.getItem("antena_operator_excluded") === "true";
+    }
+    return false;
+  });
+  const [telemetryLogsList, setTelemetryLogsList] = useState<TelemetryEvent[]>(() => getLocalTelemetryLogs());
 
   // Salto Dimensional State (>90% resonancia)
   const [isDimensionalJumpActive, setIsDimensionalJumpActive] = useState(false);
@@ -199,28 +197,11 @@ export default function App() {
   const [jumpEntity, setJumpEntity] = useState("");
   const [jumpDimension, setJumpDimension] = useState("");
 
-  // Cargar logs de Mixpanel y token guardado en servidor cuando el modal está abierto
+  // Actualizar logs de telemetría cuando el modal esté abierto
   useEffect(() => {
-    if (!isMixpanelModalOpen) return;
-    fetch("/api/mixpanel/config")
-      .then((r) => r.json())
-      .then((cfg) => {
-        if (cfg && cfg.token) {
-          setMixpanelTokenInput(cfg.token);
-          if (cfg.token.trim().length > 0) {
-            setIsMixpanelConnected(true);
-          }
-        }
-      })
-      .catch(() => {});
-
-    const updateLogs = () => {
-      fetchMixpanelLogs().then((logs) => setMixpanelLogsList(logs));
-    };
-    updateLogs();
-    const interval = setInterval(updateLogs, 3000);
-    return () => clearInterval(interval);
-  }, [isMixpanelModalOpen]);
+    if (!isTelemetryModalOpen) return;
+    setTelemetryLogsList(getLocalTelemetryLogs());
+  }, [isTelemetryModalOpen]);
 
   // Web Notifications Permission state
   const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied">("default");
@@ -1243,48 +1224,23 @@ export default function App() {
   // Initialize auth and load local logs on mount
   useEffect(() => {
     // 1. Inicializar y registrar visita de forma 100% automática en la Nube y Servidor
-    registerCloudVisit()
+    registerUniversalVisit()
       .then((count) => {
         updateVisitsState(count);
       })
       .catch(() => {
-        getCloudVisits().then((c) => updateVisitsState(c));
+        updateVisitsState(getStoredVisits());
       });
 
-    // 2. Sincronizar Token de Mixpanel guardado en el Servidor al iniciar la aplicación
-    fetch("/api/mixpanel/config")
-      .then((r) => r.json())
-      .then((cfg) => {
-        const serverToken = cfg && cfg.token ? cfg.token.trim() : "";
-        const localToken = getMixpanelToken();
-        const activeTok = serverToken || localToken;
+    logTelemetryEvent("visita", `Antena sintonizada desde ${getDeviceInfo()}`);
 
-        if (activeTok) {
-          setMixpanelTokenInput(activeTok);
-          const ok = initMixpanel(activeTok);
-          setIsMixpanelConnected(ok);
-        } else {
-          const ok = initMixpanel();
-          setIsMixpanelConnected(ok);
-        }
-
-        if (!isOperatorExcluded()) {
-          trackEvent("Carga de Antena", { timestamp: new Date().toISOString() });
-        }
-      })
-      .catch(() => {
-        const ok = initMixpanel();
-        setIsMixpanelConnected(ok);
-      });
-
-    // Polling periódico cada 12s para sincronizar en tiempo real el contador de visitas en la nube
+    // Polling periódico cada 10s para sincronizar en tiempo real el contador de visitas
     const visitsInterval = setInterval(() => {
-      getCloudVisits().then((cnt) => {
-        if (typeof cnt === "number" && cnt > 0) {
-          updateVisitsState(cnt);
-        }
-      });
-    }, 12000);
+      const stored = getStoredVisits();
+      if (stored > 0) {
+        updateVisitsState(stored);
+      }
+    }, 10000);
 
     // Detect web notification permission
     if (typeof window !== "undefined" && "Notification" in window) {
@@ -1581,16 +1537,11 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         setIsDimensionalJumpActive(true);
       }
 
-      // Registrar telemetría con Mixpanel
-      trackEvent("Sintonización Manual", {
-        frequency: freqString,
-        dimension: targetDimension,
-        intensity,
-        antennaType,
-        resonance: data.resonance,
-        status: data.status,
-        entity: data.entity,
-      });
+      // Registrar telemetría
+      logTelemetryEvent(
+        "sintonizacion",
+        `Sintonización manual en ${freqString} (${targetDimension}) - Resonancia: ${data.resonance}%`
+      );
 
       // Trigger custom toasts for Anomalies or High Intensity signals
       if (data.status === "anomaly") {
@@ -1779,16 +1730,11 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         setIsDimensionalJumpActive(true);
       }
 
-      // Registrar telemetría con Mixpanel
-      trackEvent("Escaneo Continuo Paso", {
-        frequency: freqString,
-        dimension: randomPreset.name,
-        intensity,
-        antennaType,
-        resonance: data.resonance,
-        status: data.status,
-        entity: data.entity,
-      });
+      // Registrar telemetría
+      logTelemetryEvent(
+        "sintonizacion",
+        `Escaneo automático en ${freqString} (${randomPreset.name}) - Resonancia: ${data.resonance}%`
+      );
 
       // Si la resonancia alcanza el 70% o más, registrarla automáticamente
       if (data.resonance >= 70) {
@@ -1941,13 +1887,11 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
       setTransmitResult(data);
 
       // Registrar telemetría con Mixpanel
-      trackEvent("Transmisión Dimensional", {
-        frequency: freqString,
-        dimension,
-        messageLength: currentMessageToSend.length,
-        resonance: data.resonance,
-        sentStatus: data.sentStatus,
-      });
+      // Registrar telemetría
+      logTelemetryEvent(
+        "transmision",
+        `Emisión hacia ${dimension} (${freqString}) - Resonancia: ${data.resonance}% - Estado: ${data.sentStatus}`
+      );
 
       // Trigger toasts for transmissions
       addToast(
@@ -2050,7 +1994,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
     setError(null);
 
     // 5. Volver a la pestaña principal
-    setActiveTab("antena");
+    setActiveTab("receptor");
 
     addToast(
       "🔄 APLICACIÓN Y ANTENA REINICIADAS",
@@ -2198,24 +2142,23 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               <button
                 type="button"
                 onClick={() => {
-                  setMixpanelTokenInput(getMixpanelToken());
-                  setIsMixpanelConnected(isMixpanelInitialized());
-                  setIsMixpanelModalOpen(true);
+                  setTelemetryLogsList(getLocalTelemetryLogs());
+                  setIsTelemetryModalOpen(true);
                 }}
-                className="flex items-center gap-2 bg-slate-900/90 hover:bg-slate-850 border border-indigo-500/50 hover:border-indigo-400 rounded-lg py-1.5 px-3 text-xs shadow-md transition-all duration-200 cursor-pointer group"
-                title="Haz clic para ver las Visitas Reales, Exclusión de Administrador y Configurar Mixpanel"
+                className="flex items-center gap-2 bg-slate-900/90 hover:bg-slate-850 border border-emerald-500/50 hover:border-emerald-400 rounded-lg py-1.5 px-3 text-xs shadow-md transition-all duration-200 cursor-pointer group"
+                title="Haz clic para ver la Telemetría de Visitas en Vivo, Dispositivos y Actividad"
               >
                 <div className="flex items-center gap-1.5">
-                  <BarChart3 className="w-4 h-4 text-indigo-400 shrink-0" />
-                  <span className="font-mono text-indigo-200 font-bold text-[11px]">
-                    Visitas: <strong className="text-emerald-400">{visits}</strong>
+                  <BarChart3 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="font-mono text-emerald-300 font-bold text-[11px]">
+                    Visitas: <strong className="text-white bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-700/60">{visits}</strong>
                   </span>
                 </div>
 
                 <div className="hidden md:flex items-center gap-1 text-[9px] font-mono border-l border-slate-800 pl-2">
-                  <span className={`w-1.5 h-1.5 rounded-full ${isMixpanelConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
-                  <span className={isMixpanelConnected ? "text-emerald-300 font-bold" : "text-amber-300"}>
-                    Mixpanel: {isMixpanelConnected ? "Conectado" : "Configurar"}
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-emerald-300 font-bold">
+                    Telemetría Activa
                   </span>
                 </div>
               </button>
@@ -2225,12 +2168,14 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                 type="button"
                 onClick={() => {
                   const nextState = !isExcludedOperator;
-                  setOperatorExcluded(nextState);
                   setIsExcludedOperator(nextState);
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("antena_operator_excluded", String(nextState));
+                  }
                   addToast(
                     nextState ? "EXCLUSIÓN ACTIVADA" : "EXCLUSIÓN DESACTIVADA",
                     nextState
-                      ? "Tus accesos ya NO incrementarán las visitas ni enviarán métricas a Mixpanel."
+                      ? "Tus accesos ya NO incrementarán las visitas (Modo Creador)."
                       : "Tus accesos volverán a registrarse como visitas reales.",
                     "high-intensity"
                   );
@@ -2242,11 +2187,11 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                 }`}
                 title={
                   isExcludedOperator
-                    ? "Exclusión ACTIVA: Tus visitas NO suman al contador ni a Mixpanel (Haz clic para alternar)"
+                    ? "Exclusión ACTIVA: Tus visitas NO suman al contador (Haz clic para alternar)"
                     : "Haz clic para EXCLUIR tus propias visitas y no alterar las estadísticas"
                 }
               >
-                <span>{isExcludedOperator ? "🛡️ Mis Visitas: EXCLUIDAS (FILTRO CREADOR)" : "👁️ Mis Visitas: CONTANDO"}</span>
+                <span>{isExcludedOperator ? "🛡️ Mis Visitas: EXCLUIDAS" : "👁️ Mis Visitas: CONTANDO"}</span>
               </button>
             </div>
 
@@ -4909,434 +4854,23 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         </div>
       )}
 
-      {/* Modal de Visitas Reales & Configuración de Mixpanel */}
-      {isMixpanelModalOpen && (
-        <div
-          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in text-slate-200"
-          onClick={() => setIsMixpanelModalOpen(false)}
-        >
-          <div
-            className="bg-slate-900 border border-indigo-500/40 rounded-2xl max-w-lg w-full overflow-hidden shadow-[0_0_50px_rgba(99,102,241,0.25)] relative animate-scale-up text-left"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header del Modal */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/80">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-indigo-950 border border-indigo-800 text-indigo-400">
-                  <BarChart3 className="w-5 h-5 animate-pulse" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider font-mono">
-                    Telemetría de Visitas Reales & Mixpanel
-                  </h3>
-                  <p className="text-[10px] text-indigo-400 font-mono">
-                    Seguimiento de tráfico y analítica en tiempo real
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsMixpanelModalOpen(false)}
-                className="p-1.5 rounded-lg bg-slate-950 text-slate-400 hover:text-slate-100 border border-slate-800 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {/* Modal de Telemetría de Visitas Reales & Actividad */}
+      <TelemetryModal
+        isOpen={isTelemetryModalOpen}
+        onClose={() => setIsTelemetryModalOpen(false)}
+        visits={visits}
+        onVisitsChange={(newVisits) => setVisits(newVisits)}
+        isExcludedOperator={isExcludedOperator}
+        onToggleOperatorExclusion={(nextState) => {
+          setIsExcludedOperator(nextState);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("antena_operator_excluded", String(nextState));
+          }
+        }}
+        isLowPowerMode={isLowPowerMode}
+        addToast={addToast}
+      />
 
-            {/* Cuerpo del Modal */}
-            <div className="p-5 space-y-5 text-xs">
-              
-              {/* Tarjeta de Contador de Visitas Reales Cloud */}
-              <div className="bg-slate-950/90 border border-emerald-500/40 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                      <Users className="w-4 h-4 text-emerald-400" />
-                      CONTADOR CLOUD GLOBAL (100% AUTOMÁTICO):
-                    </span>
-                    <span className="text-[9px] font-mono text-slate-400 block">
-                      ⚡ Activo en Netlify y Servidor — Sin configuración ni cuentas requeridas
-                    </span>
-                  </div>
-                  <span className="text-lg font-mono font-black text-emerald-300 bg-emerald-950 px-3 py-0.5 rounded border border-emerald-700 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-                    {visits.toLocaleString()}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
-                  Cada vez que un visitante real entra a la aplicación (en Netlify o en tu dominio), el contador suma +1 automáticamente en la nube global. Deduplica recargas de pestaña para mantener estadísticas veraces y precisas.
-                </p>
-
-                {/* Sincronización / Ajuste de Visitas Acumuladas */}
-                <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800 space-y-2">
-                  <label className="text-[10px] font-mono text-slate-300 font-bold block">
-                    ⚙️ Sincronizar / Ajustar cifra inicial de visitas acumuladas:
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={customVisitsInput}
-                      onChange={(e) => setCustomVisitsInput(e.target.value)}
-                      placeholder={`Ej: ${visits || 152}`}
-                      className="w-32 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs text-emerald-300 font-mono focus:outline-none focus:border-emerald-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const num = parseInt(customVisitsInput, 10);
-                        if (isNaN(num) || num < 0) {
-                          addToast("NÚMERO INVÁLIDO", "Ingresa una cifra válida mayor o igual a 0.", "anomaly");
-                          return;
-                        }
-                        setCloudManualCount(num)
-                          .then((saved) => {
-                            setVisitsExplicit(saved);
-                            addToast("VISITAS SINCRONIZADAS", `Contador global actualizado: ${saved}`, "high-intensity");
-                            setCustomVisitsInput("");
-                          })
-                          .catch(() => {
-                            setVisitsExplicit(num);
-                            addToast("VISITAS ACTUALIZADAS", `Contador establecido: ${num}`, "high-intensity");
-                          });
-                      }}
-                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs rounded transition-colors cursor-pointer shadow"
-                    >
-                      Establecer Total
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-1 border-t border-slate-900">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      registerCloudVisit(true)
-                        .then((cnt) => {
-                          updateVisitsState(cnt);
-                          addToast("VISITA DE PRUEBA REGISTRADA", `Nuevo total global: ${cnt}`, "high-intensity");
-                        })
-                        .catch(() => {
-                          const fallback = visits + 1;
-                          updateVisitsState(fallback);
-                          addToast("VISITA REGISTRADA", `Nuevo total: ${fallback}`, "high-intensity");
-                        });
-                    }}
-                    className="text-[10px] font-mono bg-emerald-950 hover:bg-emerald-900 text-emerald-300 px-2.5 py-1 rounded border border-emerald-700/60 transition-colors cursor-pointer flex items-center gap-1"
-                  >
-                    <span>➕ Registrar Visita de Prueba (+1)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      getCloudVisits()
-                        .then((cnt) => {
-                          updateVisitsState(cnt);
-                          addToast("SINCRONIZACIÓN EXITOSA", `Total global verificado: ${cnt}`, "high-intensity");
-                        })
-                        .catch(() => {
-                          addToast("TELEMETRÍA LOCAL", `Visitas actuales: ${visits}`, "high-intensity");
-                        });
-                    }}
-                    className="text-[10px] font-mono text-emerald-400 hover:text-emerald-300 underline cursor-pointer flex items-center gap-1"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Sincronizar con la Nube</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Tarjeta de Exclusión de Mis Propias Visitas (Filtro de Desarrollador / Operador) */}
-              <div className="bg-slate-950/90 border border-amber-500/40 rounded-xl p-4 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <span className="text-[10px] font-mono text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                    <Shield className="w-4 h-4 text-amber-400 shrink-0" />
-                    EXCLUIR MIS PROPIAS VISITAS (MODO ADMINISTRADOR):
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextState = !isExcludedOperator;
-                      setOperatorExcluded(nextState);
-                      setIsExcludedOperator(nextState);
-                      addToast(
-                        nextState ? "EXCLUSIÓN ACTIVADA" : "EXCLUSIÓN DESACTIVADA",
-                        nextState
-                          ? "Tus accesos ya NO incrementarán las visitas ni enviarán métricas a Mixpanel."
-                          : "Tus accesos volverán a registrarse como visitas reales.",
-                        "high-intensity"
-                      );
-                    }}
-                    className={`px-3 py-1.5 rounded font-mono font-bold text-[10px] uppercase transition-all cursor-pointer border flex items-center gap-1.5 self-start sm:self-auto ${
-                      isExcludedOperator
-                        ? "bg-amber-500/20 text-amber-300 border-amber-500/80 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
-                        : "bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200"
-                    }`}
-                  >
-                    <span>{isExcludedOperator ? "🛡️ EXCLUSIÓN ACTIVADA" : "⚪ REGISTRAR MIS VISITAS"}</span>
-                  </button>
-                </div>
-
-                <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
-                  {isExcludedOperator ? (
-                    <span className="text-amber-300">
-                      ✨ <strong>Filtro de Exclusión Activo en este navegador:</strong> Cuando abres o recargas la Antena, tus accesos son detectados como administrador y <strong>NO suman</strong> al contador de visitas reales ni envían eventos de navegación a tu Mixpanel.
-                    </span>
-                  ) : (
-                    <span className="text-slate-400">
-                      Tus aperturas de página se están contando como visitas reales. Haz clic en el botón superior para activar la exclusión y evitar distorsionar tus estadísticas mientras desarrollas o pruebas la aplicación.
-                    </span>
-                  )}
-                </p>
-                <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800 text-[10px] text-slate-400 font-mono">
-                  💡 <strong>Truco de Creador:</strong> Para activar la exclusión automáticamente en cualquier dispositivo o ventana de incógnito, puedes abrir la app añadiendo <code className="text-amber-300 font-bold bg-slate-950 px-1 py-0.5 rounded">?owner=true</code> al final de la URL.
-                </div>
-              </div>
-
-              {/* Configuración del Token de Mixpanel & Prueba de Conectividad */}
-              <div className="bg-slate-950/90 border border-indigo-500/40 rounded-xl p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono text-indigo-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-indigo-400" />
-                    TOKEN DEL PROYECTO DE MIXPANEL:
-                  </span>
-                  <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded border ${
-                    isMixpanelConnected
-                      ? "bg-emerald-950 text-emerald-300 border-emerald-700"
-                      : "bg-amber-950 text-amber-300 border-amber-700"
-                  }`}>
-                    {isMixpanelConnected ? "🟢 CONECTADO" : "⚠️ PENDIENTE DE CONFIGURACIÓN"}
-                  </span>
-                </div>
-
-                {/* ID de Usuario Único de Transmisión */}
-                <div className="bg-slate-900/90 px-3 py-2 rounded-lg border border-indigo-950 flex items-center justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">DISTINCT ID DE SESIÓN:</span>
-                  <span className="text-indigo-300 font-bold bg-slate-950 px-2 py-0.5 rounded border border-indigo-900">
-                    {getDistinctId()}
-                  </span>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] text-slate-400 font-mono block">
-                    Ingresa o actualiza tu Mixpanel Project Token:
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={mixpanelTokenInput}
-                      onChange={(e) => setMixpanelTokenInput(e.target.value)}
-                      placeholder="Ej: a1b2c3d4e5f67890..."
-                      className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
-                    />
-                    <button
-                      type="button"
-                      disabled={isSavingMixpanelToken}
-                      onClick={async () => {
-                        setIsSavingMixpanelToken(true);
-                        try {
-                          const saved = await saveMixpanelToken(mixpanelTokenInput);
-                          setIsMixpanelConnected(saved);
-                          const logs = await fetchMixpanelLogs();
-                          setMixpanelLogsList(logs);
-                          if (saved) {
-                            addToast("MIXPANEL CONECTADO", "Token guardado persistentemente en servidor y cliente.", "high-intensity");
-                          } else {
-                            addToast("TOKEN DESCONECTADO", "Se eliminó el token de Mixpanel.", "anomaly");
-                          }
-                        } catch (e) {
-                          addToast("ERROR AL GUARDAR", "No se pudo sincronizar el token con el servidor.", "anomaly");
-                        } finally {
-                          setIsSavingMixpanelToken(false);
-                        }
-                      }}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-900 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer font-mono shrink-0 shadow-md flex items-center gap-1.5"
-                    >
-                      {isSavingMixpanelToken ? (
-                        <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Guardando...</span>
-                        </>
-                      ) : (
-                        <span>Guardar Token</span>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Botón de Prueba Inmediata de Conectividad Mixpanel */}
-                <div className="bg-slate-900/90 p-3 rounded-xl border border-indigo-500/30 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1">
-                      <Zap className="w-3.5 h-3.5 text-indigo-400" />
-                      PRUEBA DE TRANSMISIÓN EN TIEMPO REAL:
-                    </span>
-                    <span className="text-[9px] font-mono text-slate-400">
-                      Modo Proxy Anti-AdBlocker
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-tight">
-                    Presiona el botón para emitir un evento instantáneo hacia Mixpanel (fuerza el envío incluso si la exclusión está activa):
-                  </p>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const tok = mixpanelTokenInput.trim() || getMixpanelToken();
-                      if (!tok) {
-                        addToast("TOKEN REQUERIDO", "Por favor ingresa primero un Token de Mixpanel válido.", "anomaly");
-                        return;
-                      }
-                      await saveMixpanelToken(tok);
-                      setIsMixpanelConnected(true);
-                      await trackEvent(
-                        "Prueba Manual de Conectividad",
-                        {
-                          timestamp: new Date().toISOString(),
-                          source: "Boton de Prueba UI",
-                          operador: operatorName,
-                        },
-                        true // Forza el envío ignorando filtro de exclusión para prueba
-                      );
-                      const logs = await fetchMixpanelLogs();
-                      setMixpanelLogsList(logs);
-                      addToast("🚀 EVENTO ENTREGADO A MIXPANEL", "Revisa la tabla de transmisiones en vivo abajo y tu panel en Mixpanel.com", "high-intensity");
-                    }}
-                    className="w-full py-2.5 px-3 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-mono font-bold text-xs rounded-lg transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Send className="w-4 h-4 animate-bounce" />
-                    <span>🚀 EMITIR EVENTO DE PRUEBA A MIXPANEL AHORA</span>
-                  </button>
-                </div>
-
-                {/* Feed de Transmisiones Servidor -> Mixpanel en Vivo */}
-                <div className="bg-slate-900/90 p-3.5 rounded-xl border border-indigo-900/60 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <Activity className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                      LOG DE TRANSMISIONES SERVER-TO-MIXPANEL (EN VIVO):
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => fetchMixpanelLogs().then((l) => setMixpanelLogsList(l))}
-                      className="text-[9px] font-mono text-indigo-300 hover:text-indigo-200 underline cursor-pointer"
-                    >
-                      🔄 Actualizar
-                    </button>
-                  </div>
-
-                  {mixpanelLogsList.length === 0 ? (
-                    <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-center space-y-1">
-                      <p className="text-[10px] font-mono text-slate-400">
-                        No hay transmisiones registradas aún en esta sesión de servidor.
-                      </p>
-                      <p className="text-[9px] font-mono text-slate-500">
-                        Presiona el botón superior o navega por la Antena para ver el flujo en vivo.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
-                      {mixpanelLogsList.map((log) => (
-                        <div
-                          key={log.id}
-                          className="bg-slate-950 p-2 rounded border border-slate-800 text-[10px] font-mono flex flex-col sm:flex-row sm:items-center justify-between gap-1"
-                        >
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <span className="text-indigo-300 font-bold">{log.event}</span>
-                              <span className="text-slate-500 text-[9px]">
-                                {new Date(log.timestamp).toLocaleTimeString()}
-                              </span>
-                            </div>
-                            <div className="text-[9px] text-slate-400 flex items-center gap-2">
-                              <span>Distinct ID: <strong className="text-slate-300">{log.distinct_id}</strong></span>
-                              <span>Token: <strong className="text-slate-300">{log.token_masked}</strong></span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 self-end sm:self-auto shrink-0">
-                            {log.success ? (
-                              <span className="bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 px-2 py-0.5 rounded text-[8px] font-bold">
-                                🟢 200 OK (Status 1)
-                              </span>
-                            ) : (
-                              <span className="bg-red-950/80 text-red-300 border border-red-700/60 px-2 py-0.5 rounded text-[8px] font-bold">
-                                🔴 Error de Entrega
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Diagnóstico y Guía Explicativa para ver métricas en Mixpanel.com */}
-                <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2 text-[11px] font-sans text-slate-300">
-                  <span className="font-mono text-indigo-400 font-bold block text-[10px] uppercase tracking-wider">
-                    🛠️ ¿POR QUÉ PODRÍA PARECER ESTÁTICO Y CÓMO RESOLVERLO?
-                  </span>
-                  <ul className="list-disc list-inside space-y-1 text-[10px] text-slate-300 leading-relaxed font-mono">
-                    <li>
-                      <strong className="text-amber-300">Bloqueadores de Anuncios (AdBlockers):</strong> Extensiones como uBlock o Brave suelen bloquear llamadas del cliente a <code className="text-indigo-300">mixpanel.com</code>. <em className="text-emerald-400 font-normal">Ahora nuestro servidor retransmite automáticamente los eventos por el proxy backend para evitar bloqueos.</em>
-                    </li>
-                    <li>
-                      <strong className="text-amber-300">Servidores EU vs US:</strong> El servidor proxy retransmite a las APIs de EE.UU. y Europa simultáneamente para asegurar recepción sin importar la región de tu cuenta.
-                    </li>
-                    <li>
-                      <strong className="text-amber-300">Ver Muestras en Vivo:</strong> En <a href="https://mixpanel.com" target="_blank" rel="noreferrer" className="text-indigo-400 underline font-bold">Mixpanel.com</a>, navega a <strong className="text-slate-100">Events / Live View</strong> para ver los eventos en vivo a medida que ocurren.
-                    </li>
-                  </ul>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Footer del Modal */}
-            <div className="p-4 bg-slate-950/80 border-t border-slate-800 flex items-center justify-between gap-3">
-              <span className="text-[9px] font-mono text-slate-500">
-                Guardado directo en navegador
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsMixpanelModalOpen(false)}
-                  className="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-xs transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  disabled={isSavingMixpanelToken}
-                  onClick={async () => {
-                    setIsSavingMixpanelToken(true);
-                    try {
-                      const saved = await saveMixpanelToken(mixpanelTokenInput);
-                      setIsMixpanelConnected(saved);
-                      if (saved) {
-                        addToast("CONFIGURACIÓN GUARDADA", "Token de Mixpanel guardado y activo.", "high-intensity");
-                      } else {
-                        addToast("TOKEN DESCONECTADO", "Se eliminó el token de Mixpanel.", "anomaly");
-                      }
-                      setIsMixpanelModalOpen(false);
-                    } catch (e) {
-                      addToast("ERROR AL GUARDAR", "No se pudo guardar la configuración.", "anomaly");
-                    } finally {
-                      setIsSavingMixpanelToken(false);
-                    }
-                  }}
-                  className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-900 text-white font-mono font-bold text-xs transition-colors cursor-pointer shadow-lg shadow-indigo-500/20 flex items-center gap-1.5"
-                >
-                  {isSavingMixpanelToken ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Guardando...</span>
-                    </>
-                  ) : (
-                    <span>Guardar y Volver al Sitio</span>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       {/* MODAL BLOG DE SUGERENCIAS & IDEAS MULTIDIMENSIONALES */}
       <SuggestionsBlogModal
         isOpen={isSuggestionsModalOpen}
