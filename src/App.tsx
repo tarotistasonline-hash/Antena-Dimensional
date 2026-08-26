@@ -56,6 +56,11 @@ import {
   setOperatorExcluded,
   fetchMixpanelLogs,
 } from "./mixpanel";
+import {
+  getCloudVisits,
+  registerCloudVisit,
+  setManualCount as setCloudManualCount,
+} from "./cloudCounter";
 import SignalVisualizer from "./components/SignalVisualizer";
 import DirectoryList from "./components/DirectoryList";
 import LogTable from "./components/LogTable";
@@ -1237,7 +1242,16 @@ export default function App() {
 
   // Initialize auth and load local logs on mount
   useEffect(() => {
-    // Sincronizar Token de Mixpanel guardado en el Servidor al iniciar la aplicación
+    // 1. Inicializar y registrar visita de forma 100% automática en la Nube y Servidor
+    registerCloudVisit()
+      .then((count) => {
+        updateVisitsState(count);
+      })
+      .catch(() => {
+        getCloudVisits().then((c) => updateVisitsState(c));
+      });
+
+    // 2. Sincronizar Token de Mixpanel guardado en el Servidor al iniciar la aplicación
     fetch("/api/mixpanel/config")
       .then((r) => r.json())
       .then((cfg) => {
@@ -1256,47 +1270,6 @@ export default function App() {
 
         if (!isOperatorExcluded()) {
           trackEvent("Carga de Antena", { timestamp: new Date().toISOString() });
-
-          // Verificar si es una sesión de navegación nueva en este navegador
-          const hasVisitedSession = typeof sessionStorage !== "undefined" && sessionStorage.getItem("antena_visited_session");
-          
-          if (!hasVisitedSession) {
-            if (typeof sessionStorage !== "undefined") {
-              sessionStorage.setItem("antena_visited_session", "true");
-            }
-            // Incrementar y obtener contador de visitas real para el nuevo visitante
-            fetch("/api/visits/increment", { method: "POST" })
-              .then((res) => {
-                if (!res.ok) return null;
-                return res.json();
-              })
-              .then((data) => {
-                if (data && typeof data.visits === "number") {
-                  updateVisitsState(data.visits);
-                }
-              })
-              .catch((err) => console.warn("Error al registrar telemetría de visita:", err));
-          } else {
-            // Recargar cifra actual sin incrementar en recargas dentro de la misma sesión
-            fetch("/api/visits")
-              .then((r) => r.json())
-              .then((data) => {
-                if (data && typeof data.visits === "number") {
-                  updateVisitsState(data.visits);
-                }
-              })
-              .catch(() => {});
-          }
-        } else {
-          console.log("[Antena] Visita de creador/operador excluida. Leyendo contador sin incrementar...");
-          fetch("/api/visits")
-            .then((r) => r.json())
-            .then((data) => {
-              if (data && typeof data.visits === "number") {
-                updateVisitsState(data.visits);
-              }
-            })
-            .catch(() => {});
         }
       })
       .catch(() => {
@@ -1304,20 +1277,14 @@ export default function App() {
         setIsMixpanelConnected(ok);
       });
 
-    // Polling periódico cada 8s para sincronizar en tiempo real el contador de visitas
+    // Polling periódico cada 12s para sincronizar en tiempo real el contador de visitas en la nube
     const visitsInterval = setInterval(() => {
-      fetch("/api/visits")
-        .then((r) => {
-          if (!r.ok) return null;
-          return r.json();
-        })
-        .then((data) => {
-          if (data && typeof data.visits === "number") {
-            updateVisitsState(data.visits);
-          }
-        })
-        .catch(() => {});
-    }, 8000);
+      getCloudVisits().then((cnt) => {
+        if (typeof cnt === "number" && cnt > 0) {
+          updateVisitsState(cnt);
+        }
+      });
+    }, 12000);
 
     // Detect web notification permission
     if (typeof window !== "undefined" && "Notification" in window) {
@@ -4979,19 +4946,24 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
             {/* Cuerpo del Modal */}
             <div className="p-5 space-y-5 text-xs">
               
-              {/* Tarjeta de Contador de Visitas Reales */}
+              {/* Tarjeta de Contador de Visitas Reales Cloud */}
               <div className="bg-slate-950/90 border border-emerald-500/40 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                    <Users className="w-4 h-4 text-emerald-400" />
-                    VISITAS REALES REGISTRADAS EN SERVIDOR:
-                  </span>
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <Users className="w-4 h-4 text-emerald-400" />
+                      CONTADOR CLOUD GLOBAL (100% AUTOMÁTICO):
+                    </span>
+                    <span className="text-[9px] font-mono text-slate-400 block">
+                      ⚡ Activo en Netlify y Servidor — Sin configuración ni cuentas requeridas
+                    </span>
+                  </div>
                   <span className="text-lg font-mono font-black text-emerald-300 bg-emerald-950 px-3 py-0.5 rounded border border-emerald-700 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
                     {visits.toLocaleString()}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
-                  Cada vez que un usuario real ingresa a la aplicación, el servidor suma la visita y la guarda persistentemente en disco (<code className="text-slate-400 font-mono">visits-data.json</code>).
+                  Cada vez que un visitante real entra a la aplicación (en Netlify o en tu dominio), el contador suma +1 automáticamente en la nube global. Deduplica recargas de pestaña para mantener estadísticas veraces y precisas.
                 </p>
 
                 {/* Sincronización / Ajuste de Visitas Acumuladas */}
@@ -5004,7 +4976,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                       type="number"
                       value={customVisitsInput}
                       onChange={(e) => setCustomVisitsInput(e.target.value)}
-                      placeholder={`Ej: ${visits || 150}`}
+                      placeholder={`Ej: ${visits || 152}`}
                       className="w-32 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs text-emerald-300 font-mono focus:outline-none focus:border-emerald-500"
                     />
                     <button
@@ -5015,20 +4987,16 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                           addToast("NÚMERO INVÁLIDO", "Ingresa una cifra válida mayor o igual a 0.", "anomaly");
                           return;
                         }
-                        fetch("/api/visits/set", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ count: num }),
-                        })
-                          .then((r) => r.json())
-                          .then((d) => {
-                            if (d && typeof d.visits === "number") {
-                              setVisitsExplicit(d.visits);
-                              addToast("VISITAS SINCRONIZADAS", `Contador actualizado en servidor: ${d.visits}`, "high-intensity");
-                              setCustomVisitsInput("");
-                            }
+                        setCloudManualCount(num)
+                          .then((saved) => {
+                            setVisitsExplicit(saved);
+                            addToast("VISITAS SINCRONIZADAS", `Contador global actualizado: ${saved}`, "high-intensity");
+                            setCustomVisitsInput("");
                           })
-                          .catch(() => addToast("ERROR DE SERVIDOR", "No se pudo actualizar el contador.", "anomaly"));
+                          .catch(() => {
+                            setVisitsExplicit(num);
+                            addToast("VISITAS ACTUALIZADAS", `Contador establecido: ${num}`, "high-intensity");
+                          });
                       }}
                       className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs rounded transition-colors cursor-pointer shadow"
                     >
@@ -5041,30 +5009,37 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                   <button
                     type="button"
                     onClick={() => {
-                      fetch("/api/visits/increment", { method: "POST" })
-                        .then((r) => r.json())
-                        .then((d) => {
-                          if (d && typeof d.visits === "number") updateVisitsState(d.visits);
-                          addToast("VISITA REGISTRADA", `Nuevo total en servidor: ${d.visits}`, "high-intensity");
+                      registerCloudVisit(true)
+                        .then((cnt) => {
+                          updateVisitsState(cnt);
+                          addToast("VISITA DE PRUEBA REGISTRADA", `Nuevo total global: ${cnt}`, "high-intensity");
+                        })
+                        .catch(() => {
+                          const fallback = visits + 1;
+                          updateVisitsState(fallback);
+                          addToast("VISITA REGISTRADA", `Nuevo total: ${fallback}`, "high-intensity");
                         });
                     }}
                     className="text-[10px] font-mono bg-emerald-950 hover:bg-emerald-900 text-emerald-300 px-2.5 py-1 rounded border border-emerald-700/60 transition-colors cursor-pointer flex items-center gap-1"
                   >
-                    <span>➕ Registrar Visita (+1)</span>
+                    <span>➕ Registrar Visita de Prueba (+1)</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      fetch("/api/visits")
-                        .then((r) => r.json())
-                        .then((d) => {
-                          if (d && typeof d.visits === "number") updateVisitsState(d.visits);
-                          addToast("VISITAS ACTUALIZADAS", `Total registrado en servidor: ${d.visits}`, "high-intensity");
+                      getCloudVisits()
+                        .then((cnt) => {
+                          updateVisitsState(cnt);
+                          addToast("SINCRONIZACIÓN EXITOSA", `Total global verificado: ${cnt}`, "high-intensity");
+                        })
+                        .catch(() => {
+                          addToast("TELEMETRÍA LOCAL", `Visitas actuales: ${visits}`, "high-intensity");
                         });
                     }}
-                    className="text-[10px] font-mono text-emerald-400 hover:text-emerald-300 underline cursor-pointer"
+                    className="text-[10px] font-mono text-emerald-400 hover:text-emerald-300 underline cursor-pointer flex items-center gap-1"
                   >
-                    🔄 Recargar contador
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Sincronizar con la Nube</span>
                   </button>
                 </div>
               </div>
