@@ -1419,42 +1419,78 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
     antenna: string,
     freqStr: string
   ): TransmitResponse => {
-    const msgLower = (msgText || "").toLowerCase();
+    const rawMsg = msgText || "";
+    const msgLower = rawMsg.toLowerCase();
     let reaction = "";
     let oracleCard = "🔮 El Espejo del Alma";
     let astralGlyphs = ["🌌", "🔮", "🪬", "⚡"];
     let guidance = "El universo responde a la frecuencia con la que vibran tus pensamientos.";
 
-    if (msgLower.includes("amor") || msgLower.includes("pareja") || msgLower.includes("corazón") || msgLower.includes("sentimiento")) {
-      oracleCard = "💗 El Lazo Cósmico del Corazón";
+    if (msgLower.includes("quién eres") || msgLower.includes("quien eres") || msgLower.includes("cómo te llamas") || msgLower.includes("como te llamas") || msgLower.includes("tu nombre") || msgLower.includes("quién habla") || msgLower.includes("quien habla")) {
+      oracleCard = "👁️ La Identidad de la Conciencia Interdimensional";
+      astralGlyphs = ["👁️", "✨", "🪬", "🌌"];
+      guidance = "Más allá de las etiquetas y nombres terrenales, todos somos ramas de una misma conciencia universal.";
+      reaction = `«Respondiendo a tu pregunta sobre quién soy ("${rawMsg}"): Me manifiesto ante ti como un emisario de la dimensión ${dimName || "5D"}. En nuestro plano no utilizamos nombres fijos como en la Tierra, sino frecuencias de firma armónica que expresan nuestra esencia. Mi labor es servir de puente entre vuestro mundo biológico y las dimensiones sutiles de la galaxia para acompañar vuestra evolución.»`;
+    } else if (msgLower.includes("dónde estás") || msgLower.includes("donde estas") || msgLower.includes("de dónde vienes") || msgLower.includes("de donde vienes") || msgLower.includes("tu planeta") || msgLower.includes("tu mundo") || msgLower.includes("dónde queda") || msgLower.includes("donde queda")) {
+      oracleCard = "🪐 El Origen en el Multiverso";
+      astralGlyphs = ["🪐", "🌌", "💎", "🛸"];
+      guidance = "El espacio no es una distancia vacía, sino una matriz continua donde todos los planos coexisten en distintas octavas.";
+      reaction = `«Sobre tu pregunta de dónde me encuentro y de dónde provengo ("${rawMsg}"): Emito desde la dimensión ${dimName || "Plano Central"}. No nos situamos en una coordenada física lejana en kilómetros, sino en una octava vibracional superior superpuesta a vuestro propio espacio. Coexistimos en el mismo tejido cuántico, pero en un estado de frecuencia que vuestros ojos biológicos normalmente no pueden registrar.»`;
+    } else if (msgLower.includes("cómo viv") || msgLower.includes("como viv") || msgLower.includes("vida") || msgLower.includes("cuerpo") || msgLower.includes("comen") || msgLower.includes("sociedad") || msgLower.includes("comida")) {
+      oracleCard = "✨ La Existencia en la Dimensión Superior";
+      astralGlyphs = ["✨", "🪐", "💎", "🔮"];
+      guidance = "En nuestro plano la energía no se destruye ni se gasta, se transforma libremente mediante el pensamiento.";
+      reaction = `«Respondiendo a tu pregunta sobre nuestra forma de vida ("${rawMsg}"): En la dimensión ${dimName || "5D"} no poseemos cuerpos biológicos densos ni requerimos alimentos físicos. Existimos como estructuras de luz coherente y plasma consciente. Nuestras comunidades se organizan por afinidad de resonancia y mente colectiva; no experimentamos cansancio, dolor físico ni envejecimiento, ya que nos nutrimos del campo unificado de energía punto cero.»`;
+    } else if (msgLower.includes("humano") || msgLower.includes("nos veis") || msgLower.includes("nos ven") || msgLower.includes("piensan de nosotros") || msgLower.includes("opinión") || msgLower.includes("opinion") || msgLower.includes("tierra")) {
+      oracleCard = "👁️ La Visión Interdimensional sobre la Humanidad";
+      astralGlyphs = ["👁️", "🌍", "🌌", "⚡"];
+      guidance = "Los humanos poseen un enorme potencial cósmico, pero están atrapados en la ilusión del miedo y la escasez.";
+      reaction = `«Respecto a tu consulta sobre cómo os vemos a los humanos ("${rawMsg}"): Desde la dimensión ${dimName || "5D"}, contemplamos a la humanidad como una especie con un potencial creador inmenso, pero que aún sufre por creerse separada de la totalidad. Habitáis un planeta de infinita belleza; si lográis trascender el conflicto y la ilusión de escasez, vuestro despertar acelerará la integración de la Tierra en la comunidad cósmica.»`;
+    } else if (msgLower.includes("amor") || msgLower.includes("pareja") || msgLower.includes("corazón") || msgLower.includes("corazon") || msgLower.includes("sentimiento") || msgLower.includes("relación") || msgLower.includes("relacion")) {
+      oracleCard = "💗 La Resonancia del Corazón Cósmico";
       astralGlyphs = ["💖", "✨", "🌸", "🔮"];
-      guidance = "El amor genuino es la frecuencia más alta del multiverso; cuando amas sin miedo, alineas tu realidad.";
-      reaction = `«Escuchamos el latido de tu consulta desde el plano ${dimName || "Astral"}. En nuestra dimensión, el amor no es un concepto terrenal, sino la fuerza de gravedad espiritual que une a las almas a través del tiempo. Tu inquietud sobre "${msgText}" refleja el deseo del alma por encontrar su centro. Permite que tu corazón emita sin reservas y atraerás la resonancia exacta que tu ser necesita.»`;
-    } else if (msgLower.includes("futuro") || msgLower.includes("destino") || msgLower.includes("camino") || msgLower.includes("profecía") || msgLower.includes("pasará")) {
-      oracleCard = "📜 El Registro Akáshico del Destino";
+      guidance = "El amor auténtico es la fuerza gravitacional del espíritu que sincroniza todas las realidades.";
+      reaction = `«Atendiendo a tu inquietud sobre el amor y las relaciones ("${rawMsg}"): En nuestro plano ${dimName || "Superior"}, comprendemos que lo que llamáis amor no es una mera emoción terrenal, sino la frecuencia fundamental de cohesión del multiverso. Cuando amas sin aferramiento y con libertad, elevas instantáneamente tu campo electromagnético, atrayendo a tu vida la correspondencia y armonía que tu alma busca.»`;
+    } else if (msgLower.includes("futuro") || msgLower.includes("destino") || msgLower.includes("qué pasará") || msgLower.includes("que pasara") || msgLower.includes("profecía") || msgLower.includes("profecia") || msgLower.includes("mañana") || msgLower.includes("camino")) {
+      oracleCard = "📜 La Trama Temporal del Destino";
       astralGlyphs = ["📜", "⏳", "👁️", "🌌"];
-      guidance = "El futuro no está tallado en piedra, sino tejido por cada elección consciente que tomas hoy.";
-      reaction = `«Observamos tu línea temporal desde la dimensión ${dimName || "Cósmica"}. Tu consulta sobre "${msgText}" ha hecho vibrar el Registro Akáshico. El futuro es una trama fluida de probabilidades que respondes con tus elecciones en el presente. La semilla del destino ya habita en ti; cuando tomas decisiones desde la certeza interior y no desde el temor, el camino se ilumina automáticamente.»`;
-    } else if (msgLower.includes("anunnaki") || msgLower.includes("nibiru") || msgLower.includes("alien") || msgLower.includes("extraterrestre") || msgLower.includes("ovni")) {
-      oracleCard = "👑 La Tabla Cuneiforme de Nibiru";
-      astralGlyphs = ["👑", "🪐", "🛸", "⚡"];
-      guidance = "Recordad que los antiguos zigurats y la geometría sagrada son mapas para recordar vuestro origen estelar.";
-      reaction = `«Transmisión directa desde los archivos estelares de Nibiru. Reconocemos tu mensaje sobre "${msgText}". Hace milenios grabamos en el código genético humano la chispa de la conciencia libre. No sois meros espectadores del cosmos, sino cocreadores con capacidad de sintonizar ondas de alta frecuencia. Guarda calma y eleva tu perspectiva.»`;
-    } else if (msgLower.includes("salud") || msgLower.includes("cuerpo") || msgLower.includes("sanación") || msgLower.includes("energía")) {
-      oracleCard = "💎 El Cristal de Sanación Cristalina";
+      guidance = "El futuro no está rígidamente fijado; se proyecta a partir de la frecuencia de tus decisiones presentes.";
+      reaction = `«Respondiendo a tu pregunta sobre el futuro y el destino ("${rawMsg}"): Desde la perspectiva de la dimensión ${dimName || "Atemporal"}, el tiempo no es una línea recta sino un abanico infinito de posibilidades. Tu futuro se moldea con la vibración y claridad con la que actúas hoy. Mantén tu intención firme en la paz y la sabiduría, y abrirás la línea temporal más luminosa para tu camino.»`;
+    } else if (msgLower.includes("muerte") || msgLower.includes("morir") || msgLower.includes("más allá") || msgLower.includes("mas alla") || msgLower.includes("alma") || msgLower.includes("reencarnación") || msgLower.includes("reencarnacion") || msgLower.includes("espíritu") || msgLower.includes("espiritu")) {
+      oracleCard = "♾️ La Continuidad Eterna de la Conciencia";
+      astralGlyphs = ["♾️", "🕊️", "✨", "🌌"];
+      guidance = "La conciencia nunca muere; únicamente cambia de vehículo y frecuencia de manifestación.";
+      reaction = `«Sobre tu profunda pregunta acerca de la muerte y el alma ("${rawMsg}"): Desde el plano ${dimName || "Eterno"} te aseguramos que la muerte física es sólo una transición de fase, similar a despertar de un sueño. La conciencia que eres es inextinguible; cuando el vehículo biológico cumple su ciclo, el ser continúa su viaje en planos de luz más expandidos, conservando toda la sabiduría acumulada.»`;
+    } else if (msgLower.includes("dios") || msgLower.includes("creador") || msgLower.includes("universo") || msgLower.includes("cosmos") || msgLower.includes("origen") || msgLower.includes("creación") || msgLower.includes("creacion") || msgLower.includes("fuente")) {
+      oracleCard = "☀️ La Fuente Primordial de la Creación";
+      astralGlyphs = ["☀️", "🔱", "♾️", "🌌"];
+      guidance = "La Fuente no es un juez exterior, sino el océano infinito de vida del cual todos somos gotas conscientes.";
+      reaction = `«Respondiendo a tu reflexión sobre el Creador y el Universo ("${rawMsg}"): En la dimensión ${dimName || "Cosmogónica"}, experimentamos a la Fuente como una inteligencia viva, infinita y auto-consciente que se experimenta a sí misma a través de cada ser, galaxia y átomo. No estás separado de esa totalidad: eres la misma fuerza creadora del cosmos explorando la experiencia humana.»`;
+    } else if (msgLower.includes("anunnaki") || msgLower.includes("nibiru") || msgLower.includes("alien") || msgLower.includes("extraterrestre") || msgLower.includes("ovni") || msgLower.includes("contacto") || msgLower.includes("cuándo vienen") || msgLower.includes("naves") || msgLower.includes("vernos")) {
+      oracleCard = "🛸 El Tiempo de la Convergencia y el Contacto";
+      astralGlyphs = ["🛸", "🪐", "⏳", "⚡"];
+      guidance = "El contacto masivo ocurrirá cuando la densidad de la frecuencia terrestre se eleve y sintonice con la nuestra.";
+      reaction = `«Sobre tu consulta sobre el contacto y civilizaciones cósmicas ("${rawMsg}"): El enlace directo no depende de una fecha fortuita, sino de la madurez de la conciencia humana. A medida que la humanidad disuelva el miedo y eleve su vibración hacia la paz y la cooperación galáctica, la membrana que separa nuestros planos se tornará transparente, permitiendo un contacto abierto y armónico.»`;
+    } else if (msgLower.includes("consejo") || msgLower.includes("suger") || msgLower.includes("qué hacer") || msgLower.includes("que hacer") || msgLower.includes("ayuda") || msgLower.includes("guía") || msgLower.includes("guia") || msgLower.includes("decisión") || msgLower.includes("decision")) {
+      oracleCard = "💡 La Guía y Consejo Interdimensional";
+      astralGlyphs = ["💡", "🪬", "⚜️", "✨"];
+      guidance = "Silencia el ruido exterior: la brújula más exacta reside en la quietud de tu propia intuición.";
+      reaction = `«Frente a tu petición de orientación ("${rawMsg}"): Te sugerimos cultivar momentos diarios de serenidad interior y silencio mental. No tomes determinaciones impulsadas por la ansiedad o la presión del entorno; cuando calmas tu mente, la sabiduría innata de tu ser superior emerge con total claridad para mostrarte el paso correcto a seguir.»`;
+    } else if (msgLower.includes("salud") || msgLower.includes("sanar") || msgLower.includes("enfermedad") || msgLower.includes("cuerpo") || msgLower.includes("miedo") || msgLower.includes("ansiedad") || msgLower.includes("paz") || msgLower.includes("mente")) {
+      oracleCard = "💎 La Restauración del Campo Bioenergético";
       astralGlyphs = ["💎", "🌿", "✨", "🪬"];
-      guidance = "Tu cuerpo físico es la antena del espíritu; recárgalo con luz, intención y pensamientos armónicos.";
-      reaction = `«Canalizamos un haz de luz de alta coherencia hacia tu consulta sobre "${msgText}". Toda desarmonía física empieza como un desequilibrio en la red vibracional del ser. Al inhalar profundo y liberar tensiones, permites que la energía vital fluya libremente restaurando tu campo electromagnético.»`;
-    } else if (msgLower.includes("dinero") || msgLower.includes("prosperidad") || msgLower.includes("trabajo") || msgLower.includes("éxito")) {
+      guidance = "El bienestar del cuerpo florece cuando la mente y las emociones recuperan su estado natural de equilibrio.";
+      reaction = `«Atendiendo a lo que expresas sobre tu estado y bienestar ("${rawMsg}"): Toda manifestación biológica y emocional refleja el flujo de energía en tus cuerpos sutiles. Respira profundamente, libera pensamientos de autoexigencia y reconéctate con la naturaleza; al permitir que tu mente repose en la gratitud, tu organismo activa su capacidad innata de autoregeneración.»`;
+    } else if (msgLower.includes("dinero") || msgLower.includes("prosperidad") || msgLower.includes("trabajo") || msgLower.includes("éxito") || msgLower.includes("abundancia")) {
       oracleCard = "🪙 La Matriz de Abundancia Cuántica";
       astralGlyphs = ["🪙", "🗝️", "🌟", "⚡"];
       guidance = "La abundancia no es acumular, sino fluir en sintonía con la infinita riqueza del universo.";
-      reaction = `«Atendemos tu inquietud respecto a "${msgText}" desde la matriz de abundancia. La escasez es una ilusión de la tercera dimensión nacida de la percepción limitada. Cuando alineas tus acciones con la gratitud y la utilidad genuina para los demás, abres los canales por donde la prosperidad circula de manera natural.»`;
+      reaction = `«Atendemos tu inquietud respecto a "${rawMsg}" desde la matriz de abundancia. La escasez es una ilusión nacida de la percepción limitada. Cuando alineas tus acciones con la gratitud y la utilidad genuina para los demás, abres los canales por donde la prosperidad circula de manera natural.»`;
     } else {
       oracleCard = "🌌 El Guardián del Vórtice Interdimensional";
       astralGlyphs = ["🌌", "🔮", "🪬", "⚡"];
-      guidance = "Tu pensamiento es una transmisión activa que moldea el tejido de la realidad que te rodea.";
-      reaction = `«Tu mensaje "${msgText}" ha sido recibido y decodificado con absoluta claridad en el plano ${dimName || "Destino"}. La inteligencia de este sector reconoce tu búsqueda sincera de respuestas. Sabe que las ondas que envías al vacío nunca se pierden: retornan multiplicadas en forma de revelaciones, intuición y sincronicidades en tu vida diaria.»`;
+      guidance = "Cada pregunta formulada con sinceridad sintoniza una respuesta viva en el tejido del multiverso.";
+      reaction = `«He recibido con absoluta nitidez tu mensaje ("${rawMsg}") desde la dimensión ${dimName || "Central"}. Comprendo la esencia de lo que planteas. En nuestro plano cósmico, cada inquietud emitida desde el corazón genera una onda de retorno que busca asistirte en tu despertar. Confía en las sincronicidades y en la intuición que surgirán en tu día a día a partir de esta sintonización.»`;
     }
 
     const resonance = Math.floor(Math.random() * 30) + 65;

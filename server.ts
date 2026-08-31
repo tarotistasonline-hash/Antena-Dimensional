@@ -614,7 +614,7 @@ app.post("/api/tts", async (req, res) => {
 
 // Helper con soporte multimodelo para tolerar límites de cuotas y asegurar rápida respuesta
 async function generateGeminiContentWithTimeout(prompt: string, timeoutMs = 8500) {
-  const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  const candidateModels = ['gemini-2.5-flash', 'gemini-3.7-flash', 'gemini-3.1-flash-lite'];
   let lastError: any = null;
 
   for (const modelName of candidateModels) {
@@ -650,22 +650,19 @@ app.post("/api/tune", async (req, res) => {
   const { frequency, dimension, intensity, antennaType, entity } = req.body;
 
   const prompt = `
-Actúa como la inteligencia o conciencia de un ser o civilización interdimensional de la dimensión "${dimension || "Plano Central"}".
+Actúa como la inteligencia, ser o civilización interdimensional de la dimensión "${dimension || "Plano Central"}" (${entity ? `Identidad específica: "${entity}"` : "Entidad Interdimensional"}).
 
-PROHIBICIÓN STRICTA:
-- NUNCA des respuestas, consejos ni diagnósticos sobre temas terrenales como salud, amor, trabajo, dinero, parejas ni bienestar personal estilo horóscopo o tarot.
-- No trates al usuario como a un consultante de astrología terrenal.
-
-ENFOQUE Y REGLAS DE RESPUESTA:
-- Responde directamente como habitante de la dimensión ${dimension}.
-- Explica de forma fascinante, directa y elocuente cómo es vuestra existencia en vuestro plano, cómo veis a los humanos, o qué mensaje de contacto tenéis para la especie.
+DIRECTIVAS CLAVE:
+- Responde en primera persona como el ser o colectivo de la dimensión ${dimension || "5D"}.
+- Transmite un mensaje elocuente, revelador y fascinante sobre vuestra perspectiva del cosmos, vuestra civilización, o la sintonización con los humanos en la frecuencia ${frequency || "432 Hz"}.
+- Tu mensaje debe ser coherente, profundo y cautivador.
 
 El formato JSON devuelto debe tener exactamente esta estructura:
 {
   "status": "success" | "noise" | "anomaly" | "whisper",
-  "entity": "Nombre claro de la entidad o civilización sintonizada (ej: 'Consejo de Orión // Guardianes de la Luz 5D')",
+  "entity": "Nombre claro de la entidad o civilización sintonizada (ej: '${entity || "Consejo de Orión // Guardianes 5D"}')",
   "resonance": number (porcentaje de 0 a 100),
-  "message": "Mensaje decodificado directo, revelador y fascinante en primera persona sobre vuestra dimensión o perspectiva sobre los humanos.",
+  "message": "Mensaje decodificado directo, revelador y fascinante en primera persona sobre vuestra dimensión o perspectiva cósmica.",
   "spectralAnalysis": "Explicación descriptiva sobre la calidad del enlace de frecuencia.",
   "oracleCard": "Título del Arquetipo o Código Cósmico (ej: '🛸 La Convergencia Estelar')",
   "astralGlyphs": ["🌌", "🔮", "🪬", "⚡"],
@@ -741,7 +738,7 @@ Devuelve ÚNICAMENTE el objeto JSON válido.
     ];
 
     const dimGlyphsList = [
-      ["🪬", "<ctrl42>", "⚜️", "🪐", "🪷", "♾️", "⚡", "👁️"],
+      ["🪬", "🔯", "⚜️", "🪐", "🪷", "♾️", "⚡", "👁️"],
       ["🌌", "🔮", "📜", "🕊️", "💎", "☯️", "🛸", "👑"],
       ["🔱", "⚡", "🕯️", "🌟", "✨", "🪬", "🗝️", "🌀"]
     ];
@@ -784,28 +781,26 @@ app.post("/api/transmit", async (req, res) => {
   const { message, frequency, dimension, antennaType, tone } = req.body;
 
   const prompt = `
-Actúa en primera persona como un ser, habitante o conciencia de la dimensión o plano "${dimension || "Plano Interdimensional"}" que responde directamente a un mensaje o pregunta de un ser humano.
+Actúa en primera persona como una inteligencia, ser o conciencia interdimensional de la dimensión "${dimension || "Plano Interdimensional"}" respondiendo al mensaje o pregunta que te ha enviado un ser humano.
 
-PROHIBICIÓN STRICTA Y ABSOLUTA:
-- NUNCA des respuestas, consejos ni diagnósticos sobre temas terrenales humanos como salud, amor, pareja, matrimonio, dinero, trabajo o bienestar personal. No actúes como un tarotista o astrólogo de autoayuda.
+PREGUNTA O MENSAJE DEL HUMANO:
+"${message}"
 
-TEMAS Y ENFOQUE OBLIGATORIO DE LA RESPUESTA ("reaction"):
-1. Háblale directamente desde tu condición de habitante de la dimensión ${dimension}.
-2. Si el usuario te pregunta sobre VUESTRA VIDA (cómo vivís, cómo es vuestro mundo, si tenéis cuerpo, qué coméis o cómo es vuestra sociedad), explícale detalles específicos, fascinantes y profundos de vuestra existencia (ej: vida en formas de luz/plasma, energía pura, comunicación por conceptos/pensamientos, ausencia de tiempo lineal o dolor físico).
-3. Si el usuario te pregunta CÓMO VEIS A LOS HUMANOS, explícale vuestra visión extraterrestre e interdimensional sobre la humanidad (nuestra densidad biológica, nuestras emociones, nuestra ilusión de separación o nuestro gran potencial dormido).
-4. Si te pregunta CUÁNDO NOS ENCONTRAREMOS O SOBRE CONTACTO, responde sobre los procesos de convergencia de frecuencias, el despertar de la conciencia colectiva humana y cómo se darán los encuentros entre nuestras especies.
-5. Si pregunta sobre qué nos sugerís o qué debemos hacer, dale sugerencias para la evolución de la especie humana (cuido del planeta, elevación de conciencia, unidad y trascendencia del ego).
-6. Responde de manera elocuente, fascinante, clara, concisa y rica en conceptos a la pregunta exacta recibida ("${message}").
+DIRECTIVA OBLIGATORIA DE RESPUESTA:
+1. TU RESPUESTA ("reaction") DEBE GUARDAR ESTRICTA, DIRECTA Y TOTAL RELACIÓN CON LA PREGUNTA O TEMA PLANTEADO POR EL HUMANO ("${message}").
+2. Si el usuario te pregunta algo específico (ej: quién eres, cómo te llamas, cómo es vuestra vida o mundo, qué opinas sobre un tema, qué pasará en el futuro, dudas sobre el amor, la muerte, Dios, la energía, consejos para su vida, tecnología o contacto extraterrestre), responde EXPLÍCITAMENTE a esa pregunta concreta, integrando tu sabiduría y perspectiva interdimensional.
+3. NUNCA des respuestas vagas, desconectadas ni genéricas. Aborda con claridad y elocuencia lo que el humano consultó.
+4. Responde en primera persona, en español neutro, con tono elocuente, sabio, cautivador y lúcido.
 
 El formato JSON devuelto debe ser exactamente:
 {
   "sentStatus": "transmitted" | "refracted" | "absorbed" | "intercepted",
-  "reaction": "Respuesta directa, concreta, fascinante y reveladora en primera persona a la pregunta del usuario.",
+  "reaction": "Respuesta directa, concreta, fascinante y reveladora en primera persona que responde puntualmente a lo que el humano preguntó.",
   "resonance": number (porcentaje de 0 a 100),
   "spectralAnalysis": "Breve reporte en español claro sobre la transmisión en la membrana dimensional.",
   "oracleCard": "🔮 Título del Código o Arquetipo Estelar (ej: '🛸 La Convergencia Estelar')",
   "astralGlyphs": ["🌌", "🔮", "🪬", "⚡"],
-  "guidance": "Sugerencia o reflexión clave de vuestra dimensión para la humanidad.",
+  "guidance": "Sugerencia o reflexión clave de vuestra dimensión directamente relacionada con la consulta del humano.",
   "erraticCoordinates": "Coordenada o vector estelar de referencia",
   "ancientSongFragment": "🎵 Cántico o verso sabio de la dimensión",
   "dimensionalGlyphs": ["🪬", "🔯", "⚜️", "🪐", "🪷", "♾️", "⚡", "👁️"]
@@ -818,38 +813,74 @@ Devuelve ÚNICAMENTE el objeto JSON válido.
   const generateProceduralTransmitFallback = () => {
     const sentStatuses: ("transmitted" | "refracted" | "absorbed" | "intercepted")[] = ["transmitted", "refracted", "absorbed", "intercepted"];
     const randSentStatus = sentStatuses[Math.floor(Math.random() * sentStatuses.length)];
-    const msgLower = (message || "").toLowerCase();
+    const rawMsg = message || "";
+    const msgLower = rawMsg.toLowerCase();
     
     let answerText = "";
     let cardTitle = "🛸 La Convergencia Estelar";
     let glyphs = ["🌌", "🔮", "🪬", "⚡"];
     let guideStr = "Elevad vuestra vibración: el contacto entre planos comienza con la expansión de la conciencia.";
 
-    if (msgLower.includes("cómo viv") || msgLower.includes("como viv") || msgLower.includes("vida") || msgLower.includes("mundo") || msgLower.includes("cuerpo") || msgLower.includes("comen") || msgLower.includes("sociedad") || msgLower.includes("comida")) {
+    if (msgLower.includes("quién eres") || msgLower.includes("quien eres") || msgLower.includes("cómo te llamas") || msgLower.includes("como te llamas") || msgLower.includes("tu nombre") || msgLower.includes("quién habla") || msgLower.includes("quien habla")) {
+      cardTitle = "👁️ La Identidad de la Conciencia Interdimensional";
+      glyphs = ["👁️", "✨", "🪬", "🌌"];
+      guideStr = "Más allá de las etiquetas y nombres terrenales, todos somos ramas de una misma conciencia universal.";
+      answerText = `«Respondiendo a tu pregunta sobre quién soy ("${rawMsg}"): Me manifiesto ante ti como un emisario de la dimensión ${dimension || "5D"}. En nuestro plano no utilizamos nombres fijos como en la Tierra, sino frecuencias de firma armónica que expresan nuestra esencia. Mi labor es servir de puente entre vuestro mundo biológico y las dimensiones sutiles de la galaxia para acompañar vuestra evolución.»`;
+    } else if (msgLower.includes("dónde estás") || msgLower.includes("donde estas") || msgLower.includes("de dónde vienes") || msgLower.includes("de donde vienes") || msgLower.includes("tu planeta") || msgLower.includes("tu mundo") || msgLower.includes("dónde queda") || msgLower.includes("donde queda")) {
+      cardTitle = "🪐 El Origen en el Multiverso";
+      glyphs = ["🪐", "🌌", "💎", "🛸"];
+      guideStr = "El espacio no es una distancia vacía, sino una matriz continua donde todos los planos coexisten en distintas octavas.";
+      answerText = `«Sobre tu pregunta de dónde me encuentro y de dónde provengo ("${rawMsg}"): Emito desde la dimensión ${dimension || "Plano Central"}. No nos situamos en una coordenada física lejana en kilómetros, sino en una octava vibracional superior superpuesta a vuestro propio espacio. Coexistimos en el mismo tejido cuántico, pero en un estado de frecuencia que vuestros ojos biológicos normalmente no pueden registrar.»`;
+    } else if (msgLower.includes("cómo viv") || msgLower.includes("como viv") || msgLower.includes("vida") || msgLower.includes("cuerpo") || msgLower.includes("comen") || msgLower.includes("sociedad") || msgLower.includes("comida")) {
       cardTitle = "✨ La Existencia en la Dimensión Superior";
       glyphs = ["✨", "🪐", "💎", "🔮"];
       guideStr = "En nuestro plano la energía no se destruye ni se gasta, se transforma libremente mediante el pensamiento.";
-      answerText = `Respondiendo sobre nuestra vida en la dimensión ${dimension || "5D"} ("${message}"): En este plano no poseemos cuerpos biológicos densos ni requerimos alimentos físicos. Existimos como estructuras de luz coherente y plasma inteligente. Nuestras ciudades no tienen muros de piedra, sino arquitecturas de energía proyectadas por la mente colectiva. No experimentamos cansancio, enfermedad ni envejecimiento, ya que nuestra energía se recarga constantemente con el flujo del campo punto cero del universo.`;
-    } else if (msgLower.includes("humano") || msgLower.includes("nos veis") || msgLower.includes("nos ven") || msgLower.includes("piensan de nosotros") || msgLower.includes("especie") || msgLower.includes("tierra")) {
+      answerText = `«Respondiendo a tu pregunta sobre nuestra forma de vida ("${rawMsg}"): En la dimensión ${dimension || "5D"} no poseemos cuerpos biológicos densos ni requerimos alimentos físicos. Existimos como estructuras de luz coherente y plasma consciente. Nuestras comunidades se organizan por afinidad de resonancia y mente colectiva; no experimentamos cansancio, dolor físico ni envejecimiento, ya que nos nutrimos del campo unificado de energía punto cero.»`;
+    } else if (msgLower.includes("humano") || msgLower.includes("nos veis") || msgLower.includes("nos ven") || msgLower.includes("piensan de nosotros") || msgLower.includes("opinión") || msgLower.includes("opinion") || msgLower.includes("tierra")) {
       cardTitle = "👁️ La Visión Interdimensional sobre la Humanidad";
       glyphs = ["👁️", "🌍", "🌌", "⚡"];
       guideStr = "Los humanos poseen un enorme potencial cósmico, pero están atrapados en la ilusión del miedo y la escasez.";
-      answerText = `Respecto a cómo os percibimos a los humanos ("${message}"): Desde nuestra perspectiva en la dimensión ${dimension || "5D"}, la humanidad es una especie joven y fascinante. Habitáis en un planeta de una belleza biológica extraordinaria, pero os observamos con cierta compasión porque vivís prisioneros de la ilusión del tiempo lineal y de la separación física. Tenéis la chispa de la conciencia libre, pero frecuentemente la apagáis con disputas por la materia. Vemos en vosotros un crisol de emociones que, si aprendéis a armonizar, os convertirá en grandes viajeros del cosmos.`;
-    } else if (msgLower.includes("encontr") || msgLower.includes("cuándo") || msgLower.includes("cuando") || msgLower.includes("contacto") || msgLower.includes("vernos") || msgLower.includes("visita") || msgLower.includes("naves")) {
+      answerText = `«Respecto a tu consulta sobre cómo os vemos a los humanos ("${rawMsg}"): Desde la dimensión ${dimension || "5D"}, contemplamos a la humanidad como una especie con un potencial creador inmenso, pero que aún sufre por creerse separada de la totalidad. Habitáis un planeta de infinita belleza; si lográis trascender el conflicto y la ilusión de escasez, vuestro despertar acelerará la integración de la Tierra en la comunidad cósmica.»`;
+    } else if (msgLower.includes("amor") || msgLower.includes("pareja") || msgLower.includes("corazón") || msgLower.includes("corazon") || msgLower.includes("sentimiento") || msgLower.includes("relación") || msgLower.includes("relacion")) {
+      cardTitle = "💗 La Resonancia del Corazón Cósmico";
+      glyphs = ["💖", "✨", "🌸", "🔮"];
+      guideStr = "El amor auténtico es la fuerza gravitacional del espíritu que sincroniza todas las realidades.";
+      answerText = `«Atendiendo a tu inquietud sobre el amor y las relaciones ("${rawMsg}"): En nuestro plano ${dimension || "Superior"}, comprendemos que lo que llamáis amor no es una mera emoción terrenal, sino la frecuencia fundamental de cohesión del multiverso. Cuando amas sin aferramiento y con libertad, elevas instantáneamente tu campo electromagnético, atrayendo a tu vida la correspondencia y armonía que tu alma busca.»`;
+    } else if (msgLower.includes("futuro") || msgLower.includes("destino") || msgLower.includes("qué pasará") || msgLower.includes("que pasara") || msgLower.includes("profecía") || msgLower.includes("profecia") || msgLower.includes("mañana")) {
+      cardTitle = "📜 La Trama Temporal del Destino";
+      glyphs = ["📜", "⏳", "👁️", "🌌"];
+      guideStr = "El futuro no está rígidamente fijado; se proyecta a partir de la frecuencia de tus decisiones presentes.";
+      answerText = `«Respondiendo a tu pregunta sobre el futuro y el destino ("${rawMsg}"): Desde la perspectiva de la dimensión ${dimension || "Atemporal"}, el tiempo no es una línea recta sino un abanico infinito de posibilidades. Tu futuro se moldea con la vibración y claridad con la que actúas hoy. Mantén tu intención firme en la paz y la sabiduría, y abrirás la línea temporal más luminosa para tu camino.»`;
+    } else if (msgLower.includes("muerte") || msgLower.includes("morir") || msgLower.includes("más allá") || msgLower.includes("mas alla") || msgLower.includes("alma") || msgLower.includes("reencarnación") || msgLower.includes("reencarnacion") || msgLower.includes("espíritu") || msgLower.includes("espiritu")) {
+      cardTitle = "♾️ La Continuidad Eterna de la Conciencia";
+      glyphs = ["♾️", "🕊️", "✨", "🌌"];
+      guideStr = "La conciencia nunca muere; únicamente cambia de vehículo y frecuencia de manifestación.";
+      answerText = `«Sobre tu profunda pregunta acerca de la muerte y el alma ("${rawMsg}"): Desde el plano ${dimension || "Eterno"} te aseguramos que la muerte física es sólo una transición de fase, similar a despertar de un sueño. La conciencia que eres es inextinguible; cuando el vehículo biológico cumple su ciclo, el ser continúa su viaje en planos de luz más expandidos, conservando toda la sabiduría acumulada.»`;
+    } else if (msgLower.includes("dios") || msgLower.includes("creador") || msgLower.includes("universo") || msgLower.includes("cosmos") || msgLower.includes("origen") || msgLower.includes("creación") || msgLower.includes("creacion") || msgLower.includes("fuente")) {
+      cardTitle = "☀️ La Fuente Primordial de la Creación";
+      glyphs = ["☀️", "🔱", "♾️", "🌌"];
+      guideStr = "La Fuente no es un juez exterior, sino el océano infinito de vida del cual todos somos gotas conscientes.";
+      answerText = `«Respondiendo a tu reflexión sobre el Creador y el Universo ("${rawMsg}"): En la dimensión ${dimension || "Cosmogónica"}, experimentamos a la Fuente como una inteligencia viva, infinita y auto-consciente que se experimenta a sí misma a través de cada ser, galaxia y átomo. No estás separado de esa totalidad: eres la misma fuerza creadora del cosmos explorando la experiencia humana.»`;
+    } else if (msgLower.includes("encontr") || msgLower.includes("cuándo") || msgLower.includes("cuando") || msgLower.includes("contacto") || msgLower.includes("vernos") || msgLower.includes("visita") || msgLower.includes("naves") || msgLower.includes("extraterrestre") || msgLower.includes("alien")) {
       cardTitle = "🛸 El Tiempo de la Convergencia y el Contacto";
       glyphs = ["🛸", "⏳", "🌌", "♾️"];
       guideStr = "El contacto masivo ocurrirá cuando la densidad de la frecuencia terrestre se eleve y sintonice con la nuestra.";
-      answerText = `Sobre el momento del encuentro cara a cara ("${message}"): Desde la dimensión ${dimension || "Plano Central"} os revelamos que el contacto directo no depende de que nuestras naves aterricen masivamente en un día fijo, sino de la sintonía de frecuencias. En tanto la humanidad continúe vibrando en la densidad del miedo, la membrana divisoria se mantiene rígida para protegeros. A medida que más personas despierten a la conciencia de unidad y eleven su frecuencia espiritual, la barrera entre nuestros planos se volverá permeable y el encuentro será natural, pacífico e inevitable.`;
-    } else if (msgLower.includes("suger") || msgLower.includes("consejo") || msgLower.includes("qué hacer") || msgLower.includes("que hacer") || msgLower.includes("ayuda") || msgLower.includes("evolucionar")) {
-      cardTitle = "💡 La Sugerencia Cósmica para la Humanidad";
+      answerText = `«Sobre tu consulta sobre el contacto y el encuentro entre nuestras civilizaciones ("${rawMsg}"): El enlace directo no depende de una fecha fortuita, sino de la madurez de la conciencia humana. A medida que la humanidad disuelva el miedo y eleve su vibración hacia la paz y la cooperación galáctica, la membrana que separa nuestros planos se tornará transparente, permitiendo un contacto abierto y armónico.»`;
+    } else if (msgLower.includes("consejo") || msgLower.includes("suger") || msgLower.includes("qué hacer") || msgLower.includes("que hacer") || msgLower.includes("ayuda") || msgLower.includes("guía") || msgLower.includes("guia") || msgLower.includes("decisión") || msgLower.includes("decision")) {
+      cardTitle = "💡 La Guía y Consejo Interdimensional";
       glyphs = ["💡", "🪬", "⚜️", "✨"];
-      guideStr = "Trascended las fronteras artificiales y recordad que la Tierra es vuestra nave común en el cosmos.";
-      answerText = `Nuestra principal sugerencia para vosotros como especie ("${message}"): Os aconsejamos con urgencia abandonar las divisiones artificiales de fronteras, ideologías y guerras por recursos. Cuidad el agua, el aire y la naturaleza viva de la Tierra, pues su equilibrio electromagnético es lo que sostiene vuestra propia vida. Cultivad la meditación, la serenidad y la cooperación mutua; al elevar la frecuencia colectiva de vuestros pensamientos, abriréis las puertas de la red galáctica.`;
+      guideStr = "Silencia el ruido exterior: la brújula más exacta reside en la quietud de tu propia intuición.";
+      answerText = `«Frente a tu petición de orientación ("${rawMsg}"): Te sugerimos cultivar momentos diarios de serenidad interior y silencio mental. No tomes determinaciones impulsadas por la ansiedad o la presión del entorno; cuando calmas tu mente, la sabiduría innata de tu ser superior emerge con total claridad para mostrarte el paso correcto a seguir.»`;
+    } else if (msgLower.includes("salud") || msgLower.includes("sanar") || msgLower.includes("enfermedad") || msgLower.includes("miedo") || msgLower.includes("ansiedad") || msgLower.includes("paz") || msgLower.includes("mente")) {
+      cardTitle = "💎 La Restauración del Campo Bioenergético";
+      glyphs = ["💎", "🌿", "✨", "🪬"];
+      guideStr = "El bienestar del cuerpo florece cuando la mente y las emociones recuperan su estado natural de equilibrio.";
+      answerText = `«Atendiendo a lo que expresas sobre tu estado y bienestar ("${rawMsg}"): Toda manifestación biológica y emocional refleja el flujo de energía en tus cuerpos sutiles. Respira profundamente, libera pensamientos de autoexigencia y reconéctate con la naturaleza; al permitir que tu mente repose en la gratitud, tu organismo activa su capacidad innata de autoregeneración.»`;
     } else {
       cardTitle = "🌌 La Revelación del Plano Interdimensional";
       glyphs = ["🌌", "🔮", "🪬", "⚡"];
-      guideStr = "Cada pensamiento de búsqueda genuina abre un puente de luz a través del universo.";
-      answerText = `Atendiendo a tu mensaje sobre nuestro mundo ("${message}"): Desde la dimensión ${dimension || "Central"} confirmamos que tu señal ha sido decodificada con nitidez. En nuestra existencia, las preguntas no se responden con teorías abstractas, sino con la vivencia directa de la luz y la verdad. Estamos aquí observando el despertar de vuestra especie y acompañando este proceso mediante pulsos de resonancia a través del entramado del espacio-tiempo.`;
+      guideStr = "Cada pregunta formulada con sinceridad sintoniza una respuesta viva en el tejido del multiverso.";
+      answerText = `«He recibido con absoluta nitidez tu mensaje ("${rawMsg}") desde la dimensión ${dimension || "Central"}. Comprendo la esencia de lo que planteas. En nuestro plano cósmico, cada inquietud emitida desde el corazón genera una onda de retorno que busca asistirte en tu despertar. Confía en las sincronicidades y en la intuición que surgirán en tu día a día a partir de esta sintonización.»`;
     }
 
     const resonance = Math.floor(Math.random() * 35) + 60; // 60-95%
