@@ -74,20 +74,20 @@ export const logTelemetryEvent = (
 
 // Obtener conteo guardado
 export const getStoredVisits = (): number => {
-  if (typeof window === "undefined") return 152;
+  if (typeof window === "undefined") return 298;
   try {
     const val = localStorage.getItem(STORAGE_VISITS_KEY);
     if (val) {
       const parsed = parseInt(val, 10);
-      if (!isNaN(parsed) && parsed > 0) return parsed;
+      if (!isNaN(parsed) && parsed > 0) return Math.max(298, parsed);
     }
   } catch (e) {}
-  return 152;
+  return 298;
 };
 
 // Guardar conteo
 export const saveStoredVisits = (count: number): number => {
-  const safeVal = Math.max(1, count);
+  const safeVal = Math.max(298, count);
   if (typeof window !== "undefined") {
     try {
       localStorage.setItem(STORAGE_VISITS_KEY, String(safeVal));
@@ -100,10 +100,16 @@ export const saveStoredVisits = (count: number): number => {
 export const registerUniversalVisit = async (): Promise<number> => {
   let count = getStoredVisits();
 
+  // Verificar si el operador actual está excluido (Filtro creador / ?owner=true)
+  const isOperatorExcluded =
+    typeof window !== "undefined" &&
+    (localStorage.getItem("antena_operator_excluded") === "true" ||
+      new URLSearchParams(window.location.search).get("owner") === "true");
+
   // Verificar si ya se registró en esta pestaña/sesión
   const alreadyVisited = typeof sessionStorage !== "undefined" && sessionStorage.getItem(SESSION_FLAG_KEY);
 
-  if (!alreadyVisited) {
+  if (!alreadyVisited && !isOperatorExcluded) {
     count += 1;
     saveStoredVisits(count);
     if (typeof sessionStorage !== "undefined") {
@@ -114,25 +120,13 @@ export const registerUniversalVisit = async (): Promise<number> => {
 
   // Intentar sincronizar con el servidor local si existe
   try {
-    const res = await fetch("/api/visits/increment", { method: "POST", signal: AbortSignal.timeout(1500) });
+    const endpoint = !alreadyVisited && !isOperatorExcluded ? "/api/visits/increment" : "/api/visits";
+    const method = endpoint === "/api/visits/increment" ? "POST" : "GET";
+    const res = await fetch(endpoint, { method, signal: AbortSignal.timeout(1500) });
     if (res.ok) {
       const data = await res.json();
       if (data && typeof data.visits === "number") {
         count = Math.max(count, data.visits);
-        saveStoredVisits(count);
-      }
-    }
-  } catch (e) {}
-
-  // Intentar sincronizar con nube pública de conteo para mantener sinc entre dispositivos
-  try {
-    const cloudRes = await fetch("https://api.counterapi.dev/v1/antena_interdimensional_telemetry/visits/up", {
-      signal: AbortSignal.timeout(2000),
-    });
-    if (cloudRes.ok) {
-      const data = await cloudRes.json();
-      if (data && typeof data.count === "number") {
-        count = Math.max(count, 150 + data.count);
         saveStoredVisits(count);
       }
     }

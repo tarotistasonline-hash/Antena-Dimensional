@@ -370,6 +370,20 @@ app.get("/api/visits", (req, res) => {
   res.json({ visits: getVisits() });
 });
 
+app.post("/api/visits/increment", (req, res) => {
+  const count = incrementVisits();
+  res.json({ success: true, visits: count });
+});
+
+app.post("/api/visits/set", (req, res) => {
+  const { count } = req.body;
+  if (typeof count === "number" && !isNaN(count) && count >= 0) {
+    const updated = setVisits(count);
+    return res.json({ success: true, visits: updated });
+  }
+  res.status(400).json({ error: "Invalid count" });
+});
+
 async function dispatchMixpanelTrackServer(token: string, event: string, properties?: Record<string, any>, distinctId?: string) {
   const activeToken = token || getMixpanelTokenServer();
   if (!activeToken || !event) return null;

@@ -16,7 +16,7 @@ import {
   User,
   Trash2,
 } from "lucide-react";
-import { trackEvent, getDistinctId } from "../mixpanel";
+import { logTelemetryEvent } from "../cloudCounter";
 
 export interface SuggestionComment {
   id: string;
@@ -78,7 +78,19 @@ export const SuggestionsBlogModal: React.FC<SuggestionsBlogModalProps> = ({
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
 
-  const distinctId = getDistinctId();
+  const getLocalDistinctId = () => {
+    if (typeof window !== "undefined") {
+      let id = localStorage.getItem("antena_local_distinct_id");
+      if (!id) {
+        id = "op_" + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem("antena_local_distinct_id", id);
+      }
+      return id;
+    }
+    return "op_local";
+  };
+
+  const distinctId = getLocalDistinctId();
 
   // Load suggestions from API
   const loadSuggestions = async () => {
@@ -131,7 +143,7 @@ export const SuggestionsBlogModal: React.FC<SuggestionsBlogModalProps> = ({
             return item;
           })
         );
-        trackEvent("Voto Sugerencia Blog", { suggestion_id: id });
+        logTelemetryEvent("sintonizacion", `Voto registrado en sugerencia: ${id}`);
       }
     } catch (err) {
       console.warn("Error voting:", err);
@@ -168,7 +180,7 @@ export const SuggestionsBlogModal: React.FC<SuggestionsBlogModalProps> = ({
         setNewContent("");
         setIsFormOpen(false);
         addToast("SUGERENCIA PUBLICADA", "Tu propuesta ha sido compartida en la Red Multidimensional.", "high-intensity");
-        trackEvent("Nueva Sugerencia Publicada", { category: newCategory, title: newTitle });
+        logTelemetryEvent("sintonizacion", `Nueva sugerencia publicada: ${newTitle}`);
       }
     } catch (err) {
       addToast("ERROR DE RED", "No se pudo transmitir la sugerencia al servidor.", "anomaly");
@@ -207,7 +219,7 @@ export const SuggestionsBlogModal: React.FC<SuggestionsBlogModalProps> = ({
         );
         setCommentInputs((prev) => ({ ...prev, [suggestionId]: "" }));
         addToast("COMENTARIO REGISTRADO", "Tu aporte ha sido acoplado a la sugerencia.", "high-intensity");
-        trackEvent("Comentario Sugerencia", { suggestion_id: suggestionId });
+        logTelemetryEvent("sintonizacion", `Comentario añadido a sugerencia ${suggestionId}`);
       }
     } catch (err) {
       console.warn("Error adding comment:", err);

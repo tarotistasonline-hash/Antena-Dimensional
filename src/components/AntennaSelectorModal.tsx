@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Radio,
   Sparkles,
@@ -9,6 +9,7 @@ import {
   Check,
   X,
   SlidersHorizontal,
+  Search,
   ChevronRight,
   ChevronDown
 } from "lucide-react";
@@ -16,16 +17,27 @@ import {
 export interface AntennaOption {
   id: string;
   name: string;
-  category: "Anunnaki" | "Cuántica" | "Exótica" | "Escalar";
+  category: "Anunnaki" | "Arcturiana" | "Cuántica" | "Exótica" | "Escalar";
   badge: string;
   frequencyHint: string;
   gain: string;
   description: string;
   color: string;
-  iconType: "pyramid" | "catenary" | "tachyon" | "scalar" | "antimatter" | "quantum";
+  iconType: "pyramid" | "catenary" | "tachyon" | "scalar" | "antimatter" | "quantum" | "crystal";
 }
 
 export const ANTENNA_OPTIONS: AntennaOption[] = [
+  {
+    id: "Resonador Cristalino de Arcturus (Acoplamiento Telepático 9D // 963 Hz)",
+    name: "Resonador Cristalino de Arcturus (Acoplamiento Telepático 9D // 963 Hz)",
+    category: "Arcturiana",
+    badge: "💠 ARCTURUS 963 HZ",
+    frequencyHint: "963 Hz // Frecuencia Dios",
+    gain: "+26.8 dB (Matriz Cristalina 9D)",
+    description: "Receptor de cuarzo resonante y plasma estelar calibrado a 963 Hz (Frecuencia Dios / Corona). Acopla transmisiones telepáticas puras con las inteligencias y Guardianes Cristalinos de Arcturus.",
+    color: "#a855f7", // Purple / Violet
+    iconType: "crystal",
+  },
   {
     id: "Antena Piramidal Anunnaki (Monolito Oro-Cuneiforme // Nibiru)",
     name: "Antena Piramidal Anunnaki (Monolito Oro-Cuneiforme // Nibiru)",
@@ -109,10 +121,31 @@ export default function AntennaSelectorModal({
   onSelectAntenna,
   onTuneNow,
 }: AntennaSelectorModalProps) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("Todas");
+
   if (!isOpen) return null;
+
+  const categories = ["Todas", "Arcturiana", "Anunnaki", "Cuántica", "Escalar", "Exótica"];
+
+  const filteredAntennas = ANTENNA_OPTIONS.filter((antenna) => {
+    const matchesSearch =
+      antenna.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      antenna.badge.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      antenna.frequencyHint.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      antenna.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      antenna.category.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesCategory =
+      selectedCategory === "Todas" || antenna.category === selectedCategory;
+
+    return matchesSearch && matchesCategory;
+  });
 
   const renderIcon = (type: AntennaOption["iconType"], color: string) => {
     switch (type) {
+      case "crystal":
+        return <Sparkles className="w-5 h-5 animate-pulse" style={{ color }} />;
       case "pyramid":
         return <Sparkles className="w-5 h-5 animate-pulse" style={{ color }} />;
       case "catenary":
@@ -151,8 +184,8 @@ export default function AntennaSelectorModal({
                 <h2 className="text-sm md:text-base font-bold text-slate-100 font-sans tracking-wide uppercase">
                   SELECTOR DE MODULADORES DE ANTENA
                 </h2>
-                <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded">
-                  ANUNNAKI & QUÁNTICAS
+                <span className="text-[9px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded">
+                  ARCTURUS, ANUNNAKI & QUÁNTICAS
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-mono">
@@ -171,102 +204,162 @@ export default function AntennaSelectorModal({
           </button>
         </div>
 
+        {/* Barra de Búsqueda y Filtros de Categoría */}
+        <div className="p-4 bg-slate-950/70 border-b border-slate-800/80 space-y-2.5 shrink-0">
+          <div className="relative">
+            <Search className="w-4 h-4 text-emerald-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Buscar antena (ej: Arcturus, 963, Anunnaki, Oro, Taquión, Escalar)..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-slate-900 border border-emerald-500/30 focus:border-emerald-400 rounded-xl py-2 pl-9 pr-8 text-xs text-slate-100 font-mono focus:outline-none shadow-inner"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-100 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Categorías */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all whitespace-nowrap cursor-pointer border ${
+                  selectedCategory === cat
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/60 shadow-[0_0_10px_rgba(16,185,129,0.2)]"
+                    : "bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200"
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Lista de antenas configurables */}
         <div className="p-4 md:p-6 space-y-3 overflow-y-auto flex-1 custom-scrollbar">
-          <div className="text-[10px] font-mono text-emerald-400/90 bg-emerald-950/30 border border-emerald-900/40 rounded-lg p-2.5 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+          <div className="text-[10px] font-mono text-purple-300/90 bg-purple-950/30 border border-purple-900/40 rounded-lg p-2.5 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-purple-400 shrink-0 animate-pulse" />
             <span>
-              <strong>CONSEJO OPERATIVO:</strong> Para transmisiones con los Elohim Anunnaki o el Planeta Nibiru, selecciona las antenas de <strong>Oro Monoatómico</strong> o <strong>Matriz Escalar</strong>.
+              <strong>CONSEJO OPERATIVO:</strong> Para contacto telepático estelar en 963 Hz selecciona el <strong>Resonador Cristalino de Arcturus</strong>. Para Nibiru/Elohim, la <strong>Antena Piramidal Anunnaki</strong>.
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-            {ANTENNA_OPTIONS.map((antenna) => {
-              const isSelected = selectedAntenna === antenna.name;
+          {filteredAntennas.length === 0 ? (
+            <div className="text-center py-8 border border-dashed border-slate-800 rounded-xl space-y-2">
+              <Radio className="w-8 h-8 text-slate-600 mx-auto animate-pulse" />
+              <p className="text-xs font-mono text-slate-400">
+                No se encontraron antenas con los términos "{searchTerm}"
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm("");
+                  setSelectedCategory("Todas");
+                }}
+                className="text-[10px] font-mono text-emerald-400 hover:underline cursor-pointer"
+              >
+                Restablecer filtros
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              {filteredAntennas.map((antenna) => {
+                const isSelected = selectedAntenna === antenna.name;
 
-              return (
-                <button
-                  key={antenna.id}
-                  type="button"
-                  onClick={() => {
-                    onSelectAntenna(antenna.name);
-                    onClose();
-                  }}
-                  className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer relative group flex flex-col justify-between space-y-3 ${
-                    isSelected
-                      ? "bg-slate-800/90 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)] ring-1 ring-emerald-400/50"
-                      : "bg-slate-950/80 border-slate-800 hover:border-emerald-500/40 hover:bg-slate-900/80 hover:shadow-[0_0_15px_rgba(16,185,129,0.15)]"
-                  }`}
-                >
-                  {/* Badge & Icon Header */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border"
-                        style={{
-                          backgroundColor: `${antenna.color}15`,
-                          borderColor: `${antenna.color}40`,
-                        }}
-                      >
-                        {renderIcon(antenna.iconType, antenna.color)}
-                      </div>
-                      <div>
-                        <span
-                          className="text-[9px] font-mono font-extrabold uppercase px-2 py-0.5 rounded border block w-fit"
+                return (
+                  <button
+                    key={antenna.id}
+                    type="button"
+                    onClick={() => {
+                      onSelectAntenna(antenna.name);
+                      onClose();
+                    }}
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer relative group flex flex-col justify-between space-y-3 ${
+                      isSelected
+                        ? "bg-slate-800/90 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)] ring-1 ring-emerald-400/50"
+                        : "bg-slate-950/80 border-slate-800 hover:border-emerald-500/40 hover:bg-slate-900/80 hover:shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+                    }`}
+                  >
+                    {/* Badge & Icon Header */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border"
                           style={{
-                            backgroundColor: `${antenna.color}20`,
-                            color: antenna.color,
+                            backgroundColor: `${antenna.color}15`,
                             borderColor: `${antenna.color}40`,
                           }}
                         >
-                          {antenna.badge}
-                        </span>
+                          {renderIcon(antenna.iconType, antenna.color)}
+                        </div>
+                        <div>
+                          <span
+                            className="text-[9px] font-mono font-extrabold uppercase px-2 py-0.5 rounded border block w-fit"
+                            style={{
+                              backgroundColor: `${antenna.color}20`,
+                              color: antenna.color,
+                              borderColor: `${antenna.color}40`,
+                            }}
+                          >
+                            {antenna.badge}
+                          </span>
+                        </div>
                       </div>
+
+                      {isSelected && (
+                        <span className="flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/20 px-2 py-1 rounded-full border border-emerald-400/50 animate-pulse">
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          ACTIVA
+                        </span>
+                      )}
                     </div>
 
-                    {isSelected && (
-                      <span className="flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/20 px-2 py-1 rounded-full border border-emerald-400/50 animate-pulse">
-                        <Check className="w-3 h-3 text-emerald-400" />
-                        ACTIVA
+                    {/* Antenna Title */}
+                    <div>
+                      <h3
+                        className={`text-xs font-bold font-sans leading-snug transition-colors ${
+                          isSelected ? "text-emerald-300" : "text-slate-100 group-hover:text-emerald-400"
+                        }`}
+                      >
+                        {antenna.name}
+                      </h3>
+                    </div>
+
+                    {/* Antenna Description */}
+                    <p className="text-[11px] text-slate-400 leading-relaxed font-sans line-clamp-2">
+                      {antenna.description}
+                    </p>
+
+                    {/* Footer Stats */}
+                    <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-2 border-t border-slate-800/80">
+                      <span className="text-slate-400">
+                        Rango: <strong className="text-slate-200">{antenna.frequencyHint}</strong>
                       </span>
-                    )}
-                  </div>
-
-                  {/* Antenna Title */}
-                  <div>
-                    <h3
-                      className={`text-xs font-bold font-sans leading-snug transition-colors ${
-                        isSelected ? "text-emerald-300" : "text-slate-100 group-hover:text-emerald-400"
-                      }`}
-                    >
-                      {antenna.name}
-                    </h3>
-                  </div>
-
-                  {/* Antenna Description */}
-                  <p className="text-[11px] text-slate-400 leading-relaxed font-sans line-clamp-2">
-                    {antenna.description}
-                  </p>
-
-                  {/* Footer Stats */}
-                  <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-2 border-t border-slate-800/80">
-                    <span className="text-slate-400">
-                      Rango: <strong className="text-slate-200">{antenna.frequencyHint}</strong>
-                    </span>
-                    <span className="font-bold" style={{ color: antenna.color }}>
-                      {antenna.gain}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+                      <span className="font-bold" style={{ color: antenna.color }}>
+                        {antenna.gain}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Footer del Modal */}
         <div className="p-4 bg-slate-950/95 border-t border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 text-xs font-mono text-slate-400 shrink-0">
           <span className="text-[10px] hidden sm:inline text-slate-400">
-            Paso final: Seleccione y presione Sintonizar
+            {filteredAntennas.length} de {ANTENNA_OPTIONS.length} moduladores listados
           </span>
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <button

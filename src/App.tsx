@@ -147,11 +147,11 @@ export default function App() {
         const cached = localStorage.getItem("antena_cached_visits");
         if (cached) {
           const val = parseInt(cached, 10);
-          if (!isNaN(val) && val > 0) return val;
+          if (!isNaN(val) && val > 0) return Math.max(298, val);
         }
       } catch (e) {}
     }
-    return 152;
+    return 298;
   });
 
   // Garantiza que el contador NUNCA baje ni cuente hacia atrás
@@ -2681,10 +2681,10 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               >
                 <span className="flex items-center gap-2">
                   <SlidersHorizontal className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-                  <span>ELEGIR ENTRE LAS 6 ANTENAS DISPONIBLES</span>
+                  <span>BUSCADOR Y CATÁLOGO DE ANTENAS ({ANTENNA_OPTIONS.length} DISPONIBLES)</span>
                 </span>
                 <span className="flex items-center gap-1 text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30">
-                  <span>ABRIR CATÁLOGO</span>
+                  <span>ABRIR BUSCADOR</span>
                   <ChevronDown className="w-3.5 h-3.5 text-emerald-300 group-hover:translate-y-0.5 transition-transform" />
                 </span>
               </button>

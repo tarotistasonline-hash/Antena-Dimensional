@@ -153,7 +153,7 @@ export const TelemetryModal: React.FC<TelemetryModalProps> = ({
                   type="number"
                   value={customVisitsInput}
                   onChange={(e) => setCustomVisitsInput(e.target.value)}
-                  placeholder={`Ej: ${visits || 152}`}
+                  placeholder={`Ej: ${visits || 298}`}
                   className="w-32 bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-emerald-300 font-mono focus:outline-none focus:border-emerald-500"
                 />
                 <button

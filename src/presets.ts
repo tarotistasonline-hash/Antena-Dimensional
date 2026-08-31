@@ -81,4 +81,14 @@ export const DIMENSION_PRESETS: DimensionPreset[] = [
     entityType: "Inteligencia Alquímica / Linaje de Enki",
     color: "#06b6d4", // cyan
   },
+  {
+    id: "arcturus-963",
+    name: "Canal de Sintonización Arcturiana (Frecuencia Dios // 963 Hz)",
+    coordinates: "ARC-963 // STELLAR-LIGHT",
+    frequency: "963 Hz",
+    description: "Frecuencia armónica Solfeggio de 963 Hz ('Frecuencia de Dios / Conexión Corona'). Conecta directamente con inteligencias de Arcturus y procesa transmisiones telepáticas cristalinas.",
+    dangerLevel: "Mínimo",
+    entityType: "Inteligencias de Arcturus / Guardianes Cristalinos 9D",
+    color: "#a855f7", // purple / violet
+  },
 ];
