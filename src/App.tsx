@@ -66,6 +66,7 @@ import AmbientAudioEqualizer from "./components/AmbientAudioEqualizer";
 import { TransmissionWaveVisualizer } from "./components/TransmissionWaveVisualizer";
 import { CircularProgressRing } from "./components/CircularProgressRing";
 import { SuggestionsBlogModal } from "./components/SuggestionsBlogModal";
+import { SuggestionsBlogView } from "./components/SuggestionsBlogView";
 import { TelemetryModal } from "./components/TelemetryModal";
 import { StellarParticlesCanvas } from "./components/StellarParticlesCanvas";
 import { DimensionalJumpOverlay } from "./components/DimensionalJumpOverlay";
@@ -213,7 +214,7 @@ export default function App() {
   const [activeHelpTooltip, setActiveHelpTooltip] = useState<string | null>(null);
 
   // Navegación Principal por Pestañas Organizadas
-  const [activeMainTab, setActiveMainTab] = useState<"station" | "telemetry" | "directory" | "settings" | "all">("all");
+  const [activeMainTab, setActiveMainTab] = useState<"station" | "telemetry" | "directory" | "settings" | "blog" | "all">("all");
 
   // Low Power Mode, Immersion Mode & Glitch Mode States
   const [isLowPowerMode, setIsLowPowerMode] = useState<boolean>(() => {
@@ -2091,8 +2092,8 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               title="Abre el foro de la comunidad para proponer y votar ideas o nuevas frecuencias para la Antena"
             >
               <Lightbulb className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform animate-pulse" />
-              <span className="font-mono text-amber-200 font-bold text-[11px] hidden sm:inline">
-                📜 Blog Sugerencias
+              <span className="font-mono text-amber-200 font-bold text-[11px]">
+                📜 Blog
               </span>
             </button>
 
@@ -2508,12 +2509,16 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
           </button>
 
           <button
-            onClick={() => setIsSuggestionsModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl font-mono text-xs font-bold uppercase transition-all flex items-center gap-2 cursor-pointer border bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border-amber-500/60 hover:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
-            title="Abre el foro para proponer nuevas funciones o frecuencias"
+            onClick={() => setActiveMainTab("blog")}
+            className={`px-4 py-2.5 rounded-xl font-mono text-xs font-bold uppercase transition-all flex items-center gap-2 cursor-pointer border ${
+              activeMainTab === "blog"
+                ? "bg-amber-500/25 text-amber-300 border-amber-500/70 shadow-[0_0_18px_rgba(245,158,11,0.35)] font-black"
+                : "bg-amber-950/40 text-amber-400 border-amber-500/40 hover:bg-amber-900/60 hover:text-amber-200"
+            }`}
+            title="Abre el blog y foro de la comunidad para leer y publicar propuestas"
           >
             <Lightbulb className="w-4 h-4 text-amber-400 animate-pulse" />
-            <span>📜 Blog de Sugerencias</span>
+            <span>5. Blog e Ideas</span>
           </button>
 
           <button
@@ -4617,6 +4622,25 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         </div>
       )}
 
+      {/* PESTAÑA 5: BLOG DE SUGERENCIAS & IDEAS MULTIDIMENSIONALES */}
+      {(activeMainTab === "blog" || activeMainTab === "all") && (
+        <div className="space-y-6 animate-fade-in">
+          {activeMainTab === "all" && (
+            <div className="flex items-center gap-2 border-b border-amber-500/30 pb-2 pt-4">
+              <Lightbulb className="w-5 h-5 text-amber-400" />
+              <h2 className="text-sm font-bold text-amber-300 font-mono uppercase tracking-wider">
+                SECCIÓN 5: Blog de Sugerencias e Ideas Multidimensionales
+              </h2>
+            </div>
+          )}
+
+          <SuggestionsBlogView
+            operatorName={operatorName}
+            addToast={addToast}
+          />
+        </div>
+      )}
+
       {/* Sistema de Notificaciones Flotantes (Toasts) */}
       <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-3 max-w-sm w-full p-4 md:p-0 pointer-events-none">
         {toasts.map((toast) => (
@@ -4913,6 +4937,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         onClose={() => setIsSuggestionsModalOpen(false)}
         operatorName={operatorName}
         addToast={addToast}
+        onOpenAsTab={() => setActiveMainTab("blog")}
       />
     </div>
   );
