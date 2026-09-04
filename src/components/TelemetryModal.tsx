@@ -15,6 +15,8 @@ import {
   getLocalTelemetryLogs,
   getDeviceInfo,
   TelemetryEvent,
+  fetchServerVisits,
+  incrementServerVisit,
 } from "../cloudCounter";
 
 interface TelemetryModalProps {
@@ -44,15 +46,13 @@ export const TelemetryModal: React.FC<TelemetryModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setIsRefreshing(true);
-    const stored = getStoredVisits();
+    const stored = await fetchServerVisits();
     onVisitsChange(stored);
     setLogs(getLocalTelemetryLogs());
-    setTimeout(() => {
-      setIsRefreshing(false);
-      addToast("TELEMETRÍA ACTUALIZADA", `Visitas activas: ${stored}`, "high-intensity");
-    }, 250);
+    setIsRefreshing(false);
+    addToast("TELEMETRÍA ACTUALIZADA", `Visitas sincronizadas en vivo: ${stored}`, "high-intensity");
   };
 
   const handleSetCustomVisits = async () => {
@@ -69,11 +69,10 @@ export const TelemetryModal: React.FC<TelemetryModalProps> = ({
   };
 
   const handleTestVisit = async () => {
-    const next = visits + 1;
-    const saved = await setUniversalVisits(next);
+    const saved = await incrementServerVisit();
     onVisitsChange(saved);
     setLogs(getLocalTelemetryLogs());
-    addToast("VISITA REGISTRADA (+1)", `Total de visitas: ${saved}`, "high-intensity");
+    addToast("VISITA REGISTRADA (+1)", `Total de visitas en servidor: ${saved}`, "high-intensity");
   };
 
   const handleClearLogs = () => {

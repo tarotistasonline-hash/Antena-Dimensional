@@ -21,13 +21,14 @@ function getVisits(): number {
       const data = fs.readFileSync(VISITS_FILE, "utf-8");
       const parsed = JSON.parse(data);
       if (typeof parsed.count === "number" && !isNaN(parsed.count) && parsed.count >= 0) {
-        inMemoryVisitsCount = Math.max(inMemoryVisitsCount, parsed.count);
+        inMemoryVisitsCount = Math.max(298, Math.max(inMemoryVisitsCount, parsed.count));
         return inMemoryVisitsCount;
       }
     }
   } catch (e) {
     console.error("Error reading visits file", e);
   }
+  inMemoryVisitsCount = Math.max(298, inMemoryVisitsCount);
   return inMemoryVisitsCount;
 }
 
@@ -367,21 +368,7 @@ app.delete("/api/suggestions/:id", (req, res) => {
 });
 
 app.get("/api/visits", (req, res) => {
-  res.json({ visits: getVisits() });
-});
-
-app.post("/api/visits/increment", (req, res) => {
-  const count = incrementVisits();
-  res.json({ success: true, visits: count });
-});
-
-app.post("/api/visits/set", (req, res) => {
-  const { count } = req.body;
-  if (typeof count === "number" && !isNaN(count) && count >= 0) {
-    const updated = setVisits(count);
-    return res.json({ success: true, visits: updated });
-  }
-  res.status(400).json({ error: "Invalid count" });
+  res.json({ success: true, visits: getVisits() });
 });
 
 async function dispatchMixpanelTrackServer(token: string, event: string, properties?: Record<string, any>, distinctId?: string) {
@@ -470,7 +457,7 @@ app.post("/api/visits/increment", async (req, res) => {
     user_agent: (req.headers["user-agent"] as string) || "desconocido",
   }).catch(() => {});
 
-  res.json({ visits: count });
+  res.json({ success: true, visits: count });
 });
 
 app.post("/api/visits/set", (req, res) => {

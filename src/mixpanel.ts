@@ -151,21 +151,16 @@ export const isOperatorExcluded = (): boolean => {
       params.get("admin") === "true" ||
       params.get("exclude") === "true"
     ) {
-      localStorage.setItem("antena_exclude_my_visits_v2", "true");
-      localStorage.setItem("antena_exclude_my_visits", "true");
+      setOperatorExcluded(true);
       return true;
     }
   } catch (e) {}
 
-  // Preferir la clave v2
-  const valV2 = localStorage.getItem("antena_exclude_my_visits_v2");
-  if (valV2 !== null) {
-    return valV2 === "true";
-  }
-
-  // Si no hay valor en v2, por defecto NUNCA excluimos visitas para garantizar
-  // que los usuarios reales cuenten en el contador y en Mixpanel.
-  return false;
+  return (
+    localStorage.getItem("antena_operator_excluded") === "true" ||
+    localStorage.getItem("antena_exclude_my_visits_v2") === "true" ||
+    localStorage.getItem("antena_exclude_my_visits") === "true"
+  );
 };
 
 /**
@@ -173,6 +168,7 @@ export const isOperatorExcluded = (): boolean => {
  */
 export const setOperatorExcluded = (excluded: boolean): boolean => {
   if (typeof window === "undefined") return false;
+  localStorage.setItem("antena_operator_excluded", excluded ? "true" : "false");
   localStorage.setItem("antena_exclude_my_visits_v2", excluded ? "true" : "false");
   localStorage.setItem("antena_exclude_my_visits", excluded ? "true" : "false");
   return excluded;

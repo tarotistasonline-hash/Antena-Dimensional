@@ -5,7 +5,7 @@
 
 const STORAGE_VISITS_KEY = "antena_universal_visits_count";
 const STORAGE_EVENTS_KEY = "antena_telemetry_events_log";
-const SESSION_FLAG_KEY = "antena_session_registered_today";
+const LAST_INCREMENT_TIME_KEY = "antena_last_increment_time_epoch";
 
 export interface TelemetryEvent {
   id: string;
@@ -52,7 +52,7 @@ export const logTelemetryEvent = (
   try {
     const current = getLocalTelemetryLogs();
     const newEvent: TelemetryEvent = {
-      id: "evt_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
+      id: "evt_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
       timestamp: new Date().toLocaleTimeString("es-ES", {
         hour: "2-digit",
         minute: "2-digit",
@@ -72,7 +72,7 @@ export const logTelemetryEvent = (
   }
 };
 
-// Obtener conteo guardado
+// Obtener conteo guardado en caché local
 export const getStoredVisits = (): number => {
   if (typeof window === "undefined") return 298;
   try {
@@ -85,7 +85,7 @@ export const getStoredVisits = (): number => {
   return 298;
 };
 
-// Guardar conteo
+// Guardar conteo en caché local
 export const saveStoredVisits = (count: number): number => {
   const safeVal = Math.max(298, count);
   if (typeof window !== "undefined") {
@@ -96,33 +96,50 @@ export const saveStoredVisits = (count: number): number => {
   return safeVal;
 };
 
-// Registrar visita (incrementa si es sesión nueva)
-export const registerUniversalVisit = async (): Promise<number> => {
-  let count = getStoredVisits();
-
-  // Verificar si el operador actual está excluido (Filtro creador / ?owner=true)
-  const isOperatorExcluded =
-    typeof window !== "undefined" &&
-    (localStorage.getItem("antena_operator_excluded") === "true" ||
-      new URLSearchParams(window.location.search).get("owner") === "true");
-
-  // Verificar si ya se registró en esta pestaña/sesión
-  const alreadyVisited = typeof sessionStorage !== "undefined" && sessionStorage.getItem(SESSION_FLAG_KEY);
-
-  if (!alreadyVisited && !isOperatorExcluded) {
-    count += 1;
-    saveStoredVisits(count);
-    if (typeof sessionStorage !== "undefined") {
-      sessionStorage.setItem(SESSION_FLAG_KEY, "true");
-    }
-    logTelemetryEvent("visita", `Nueva conexión registrada desde ${getDeviceInfo()}`);
-  }
-
-  // Intentar sincronizar con el servidor local si existe
+// Comprueba si el operador actual está excluido del conteo
+export const isCurrentOperatorExcluded = (): boolean => {
+  if (typeof window === "undefined") return false;
   try {
-    const endpoint = !alreadyVisited && !isOperatorExcluded ? "/api/visits/increment" : "/api/visits";
-    const method = endpoint === "/api/visits/increment" ? "POST" : "GET";
-    const res = await fetch(endpoint, { method, signal: AbortSignal.timeout(1500) });
+    const params = new URLSearchParams(window.location.search);
+    if (
+      params.get("owner") === "true" ||
+      params.get("creator") === "true" ||
+      params.get("admin") === "true" ||
+      params.get("exclude") === "true"
+    ) {
+      setOperatorExclusionState(true);
+      return true;
+    }
+  } catch (e) {}
+
+  return (
+    localStorage.getItem("antena_operator_excluded") === "true" ||
+    localStorage.getItem("antena_exclude_my_visits_v2") === "true" ||
+    localStorage.getItem("antena_exclude_my_visits") === "true"
+  );
+};
+
+// Activa o desactiva la exclusión del operador
+export const setOperatorExclusionState = (excluded: boolean): boolean => {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem("antena_operator_excluded", String(excluded));
+      localStorage.setItem("antena_exclude_my_visits_v2", String(excluded));
+      localStorage.setItem("antena_exclude_my_visits", String(excluded));
+    } catch (e) {}
+  }
+  return excluded;
+};
+
+// Sincroniza y obtiene el conteo real en vivo desde el servidor
+export const fetchServerVisits = async (): Promise<number> => {
+  let count = getStoredVisits();
+  try {
+    const res = await fetch("/api/visits", {
+      method: "GET",
+      headers: { "Cache-Control": "no-cache" },
+      signal: AbortSignal.timeout(6000),
+    });
     if (res.ok) {
       const data = await res.json();
       if (data && typeof data.visits === "number") {
@@ -130,22 +147,94 @@ export const registerUniversalVisit = async (): Promise<number> => {
         saveStoredVisits(count);
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    // Si la red falla, se conserva la copia local
+  }
+  return count;
+};
+
+// Registrar visita (incrementa en el servidor si no está en cooldown o si es forzada)
+export const registerUniversalVisit = async (force: boolean = false): Promise<number> => {
+  let count = getStoredVisits();
+  const isExcluded = isCurrentOperatorExcluded();
+
+  // Si el operador activó exclusión voluntaria y no es una acción forzada (+1 de prueba), solo consulta
+  if (isExcluded && !force) {
+    return fetchServerVisits();
+  }
+
+  // Comprobar cooldown de 10 segundos entre incrementos automáticos de la misma sesión
+  const now = Date.now();
+  let lastTime = 0;
+  if (typeof sessionStorage !== "undefined") {
+    try {
+      lastTime = parseInt(sessionStorage.getItem(LAST_INCREMENT_TIME_KEY) || "0", 10);
+    } catch (e) {}
+  }
+
+  const shouldIncrement = force || isNaN(lastTime) || now - lastTime > 10000;
+
+  if (shouldIncrement) {
+    if (typeof sessionStorage !== "undefined") {
+      try {
+        sessionStorage.setItem(LAST_INCREMENT_TIME_KEY, String(now));
+      } catch (e) {}
+    }
+
+    logTelemetryEvent("visita", `Nueva conexión registrada desde ${getDeviceInfo()}`);
+
+    try {
+      const res = await fetch("/api/visits/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(6000),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data.visits === "number") {
+          count = Math.max(count, data.visits);
+          saveStoredVisits(count);
+          return count;
+        }
+      }
+    } catch (e) {
+      // Si el servidor no responde de inmediato, incrementa localmente de forma provisional
+      count += 1;
+      saveStoredVisits(count);
+      return count;
+    }
+  } else {
+    // Si ya incrementó hace menos de 10s, sincroniza con el servidor
+    return fetchServerVisits();
+  }
 
   return count;
 };
 
+// Forzar incremento explícito (+1 de prueba o botón directo)
+export const incrementServerVisit = async (): Promise<number> => {
+  return registerUniversalVisit(true);
+};
+
 // Función para reiniciar o cambiar el conteo manualmente
 export const setUniversalVisits = async (newCount: number): Promise<number> => {
-  const val = saveStoredVisits(newCount);
+  const val = Math.max(298, Math.floor(newCount));
+  saveStoredVisits(val);
   logTelemetryEvent("visita", `Contador ajustado manualmente a ${val}`);
   try {
-    await fetch("/api/visits/set", {
+    const res = await fetch("/api/visits/set", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ count: val }),
-      signal: AbortSignal.timeout(1500),
+      signal: AbortSignal.timeout(6000),
     });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && typeof data.visits === "number") {
+        return saveStoredVisits(data.visits);
+      }
+    }
   } catch (e) {}
   return val;
 };

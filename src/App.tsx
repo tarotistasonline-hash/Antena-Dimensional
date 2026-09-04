@@ -53,6 +53,9 @@ import {
   logTelemetryEvent,
   getDeviceInfo,
   TelemetryEvent,
+  fetchServerVisits,
+  isCurrentOperatorExcluded,
+  setOperatorExclusionState,
 } from "./cloudCounter";
 import SignalVisualizer from "./components/SignalVisualizer";
 import DirectoryList from "./components/DirectoryList";
@@ -183,12 +186,7 @@ export default function App() {
   const [isTelemetryModalOpen, setIsTelemetryModalOpen] = useState(false);
   const [isSuggestionsModalOpen, setIsSuggestionsModalOpen] = useState(false);
   const [isExcludedOperator, setIsExcludedOperator] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get("owner") === "true") return true;
-      return localStorage.getItem("antena_operator_excluded") === "true";
-    }
-    return false;
+    return isCurrentOperatorExcluded();
   });
   const [telemetryLogsList, setTelemetryLogsList] = useState<TelemetryEvent[]>(() => getLocalTelemetryLogs());
 
@@ -1235,13 +1233,31 @@ export default function App() {
 
     logTelemetryEvent("visita", `Antena sintonizada desde ${getDeviceInfo()}`);
 
-    // Polling periódico cada 10s para sincronizar en tiempo real el contador de visitas
-    const visitsInterval = setInterval(() => {
-      const stored = getStoredVisits();
-      if (stored > 0) {
-        updateVisitsState(stored);
-      }
-    }, 10000);
+    // Polling periódico cada 8s para sincronizar en tiempo real el contador de visitas con el servidor
+    const visitsInterval = setInterval(async () => {
+      try {
+        const liveCount = await fetchServerVisits();
+        if (typeof liveCount === "number" && liveCount > 0) {
+          updateVisitsState(liveCount);
+        }
+      } catch (e) {}
+    }, 8000);
+
+    // Sincronizar de inmediato cuando la ventana o pestaña vuelve al frente (especialmente útil en móviles)
+    const handleFocusSync = () => {
+      fetchServerVisits()
+        .then((live) => {
+          if (typeof live === "number" && live > 0) {
+            updateVisitsState(live);
+          }
+        })
+        .catch(() => {});
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", handleFocusSync);
+      document.addEventListener("visibilitychange", handleFocusSync);
+    }
 
     // Detect web notification permission
     if (typeof window !== "undefined" && "Notification" in window) {
@@ -1292,6 +1308,14 @@ export default function App() {
         window.speechSynthesis.onvoiceschanged = updateVoicesList;
       }
     }
+
+    return () => {
+      clearInterval(visitsInterval);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", handleFocusSync);
+        document.removeEventListener("visibilitychange", handleFocusSync);
+      }
+    };
   }, []);
 
   // Limpieza de audio al desmontar
@@ -2206,9 +2230,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                 onClick={() => {
                   const nextState = !isExcludedOperator;
                   setIsExcludedOperator(nextState);
-                  if (typeof window !== "undefined") {
-                    localStorage.setItem("antena_operator_excluded", String(nextState));
-                  }
+                  setOperatorExclusionState(nextState);
                   addToast(
                     nextState ? "EXCLUSIÓN ACTIVADA" : "EXCLUSIÓN DESACTIVADA",
                     nextState
