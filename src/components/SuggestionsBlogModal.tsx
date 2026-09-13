@@ -23,7 +23,9 @@ export const SuggestionsBlogModal: React.FC<SuggestionsBlogModalProps> = ({
   addToast,
   onOpenAsTab,
 }) => {
-  const [isMaximized, setIsMaximized] = useState<boolean>(false);
+  const [isMaximized, setIsMaximized] = useState<boolean>(() => {
+    return typeof window !== "undefined" && window.innerWidth < 768;
+  });
 
   if (!isOpen) return null;
 

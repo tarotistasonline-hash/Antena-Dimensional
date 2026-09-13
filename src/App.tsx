@@ -74,6 +74,8 @@ import { TelemetryModal } from "./components/TelemetryModal";
 import { StellarParticlesCanvas } from "./components/StellarParticlesCanvas";
 import { DimensionalJumpOverlay } from "./components/DimensionalJumpOverlay";
 import { radioStatic } from "./radioStatic";
+import { SimpleOracleView } from "./components/SimpleOracleView";
+import { TransdimensionalTuningHUD } from "./components/TransdimensionalTuningHUD";
 
 interface QuantumToast {
   id: string;
@@ -84,6 +86,16 @@ interface QuantumToast {
 }
 
 export default function App() {
+  // Modo de Interfaz: Simple (por defecto para principiantes y móvil) vs Consola Avanzada
+  const [isSimpleMode, setIsSimpleMode] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("antena_ui_mode");
+      if (saved === "advanced") return false;
+      if (saved === "simple") return true;
+    }
+    return true; // Por defecto modo simple/fácil para que amigos e invitados lo entiendan de inmediato
+  });
+
   // Operador Local State
   const [operatorName, setOperatorName] = useState(() => localStorage.getItem("antena_operator_name") || "Operador-01");
   const [operatorRank, setOperatorRank] = useState(() => localStorage.getItem("antena_operator_rank") || "Operador Transdimensional");
@@ -1501,21 +1513,31 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
       astralGlyphs = ["💡", "🪬", "⚜️", "✨"];
       guidance = "Silencia el ruido exterior: la brújula más exacta reside en la quietud de tu propia intuición.";
       reaction = `«Frente a tu petición de orientación ("${rawMsg}"): Te sugerimos cultivar momentos diarios de serenidad interior y silencio mental. No tomes determinaciones impulsadas por la ansiedad o la presión del entorno; cuando calmas tu mente, la sabiduría innata de tu ser superior emerge con total claridad para mostrarte el paso correcto a seguir.»`;
-    } else if (msgLower.includes("salud") || msgLower.includes("sanar") || msgLower.includes("enfermedad") || msgLower.includes("cuerpo") || msgLower.includes("miedo") || msgLower.includes("ansiedad") || msgLower.includes("paz") || msgLower.includes("mente")) {
+    } else if (msgLower.includes("salud") || msgLower.includes("sanar") || msgLower.includes("enfermedad") || msgLower.includes("cuerpo") || msgLower.includes("miedo") || msgLower.includes("ansiedad") || msgLower.includes("paz") || msgLower.includes("mente") || msgLower.includes("triste") || msgLower.includes("soledad") || msgLower.includes("angustia") || msgLower.includes("depresión") || msgLower.includes("depresion")) {
       oracleCard = "💎 La Restauración del Campo Bioenergético";
       astralGlyphs = ["💎", "🌿", "✨", "🪬"];
-      guidance = "El bienestar del cuerpo florece cuando la mente y las emociones recuperan su estado natural de equilibrio.";
-      reaction = `«Atendiendo a lo que expresas sobre tu estado y bienestar ("${rawMsg}"): Toda manifestación biológica y emocional refleja el flujo de energía en tus cuerpos sutiles. Respira profundamente, libera pensamientos de autoexigencia y reconéctate con la naturaleza; al permitir que tu mente repose en la gratitud, tu organismo activa su capacidad innata de autoregeneración.»`;
-    } else if (msgLower.includes("dinero") || msgLower.includes("prosperidad") || msgLower.includes("trabajo") || msgLower.includes("éxito") || msgLower.includes("abundancia")) {
+      guidance = "El bienestar del cuerpo florece cuando la mente reposa en la gratitud y se libera del juicio.";
+      reaction = `«Atendiendo a lo que expresas sobre tu estado emocional y bienestar ("${rawMsg}"): Toda inquietud o tristeza refleja una sobrecarga transitoria en tus cuerpos sutiles. Respira profundamente y recuerda que no estás solo. Al permitirte sentir sin juzgarte y volver a la calma del presente, activas la regeneración natural de tu campo bioenergético.»`;
+    } else if (msgLower.includes("propósito") || msgLower.includes("proposito") || msgLower.includes("misión") || msgLower.includes("mision") || msgLower.includes("para qué estoy") || msgLower.includes("sentido") || msgLower.includes("hacer con mi vida")) {
+      oracleCard = "🌟 La Brújula del Propósito Estelar";
+      astralGlyphs = ["🌟", "🗝️", "📜", "✨"];
+      guidance = "Tu misión primordial es ser el ancla viva de tu propia autenticidad y alegría.";
+      reaction = `«Sobre tu consulta acerca de tu propósito y misión ("${rawMsg}"): En la dimensión ${dimName || "5D"} vemos con claridad que tu misión no es una obligación rígida externa, sino el despliegue de tus dones innatos con alegría y servicio hacia los demás. Todo acto cotidiano impregnado de amor y presencia eleva la frecuencia de la Tierra entera.»`;
+    } else if (msgLower.includes("dinero") || msgLower.includes("prosperidad") || msgLower.includes("trabajo") || msgLower.includes("éxito") || msgLower.includes("exito") || msgLower.includes("abundancia") || msgLower.includes("finanzas") || msgLower.includes("empleo")) {
       oracleCard = "🪙 La Matriz de Abundancia Cuántica";
       astralGlyphs = ["🪙", "🗝️", "🌟", "⚡"];
       guidance = "La abundancia no es acumular, sino fluir en sintonía con la infinita riqueza del universo.";
       reaction = `«Atendemos tu inquietud respecto a "${rawMsg}" desde la matriz de abundancia. La escasez es una ilusión nacida de la percepción limitada. Cuando alineas tus acciones con la gratitud y la utilidad genuina para los demás, abres los canales por donde la prosperidad circula de manera natural.»`;
+    } else if (msgLower.includes("medita") || msgLower.includes("vibraci") || msgLower.includes("energía") || msgLower.includes("energia") || msgLower.includes("chakra") || msgLower.includes("aura") || msgLower.includes("frecuencia")) {
+      oracleCard = "🧘 La Sintonía de los Campos Armónicos";
+      astralGlyphs = ["🧘", "🪷", "💎", "✨"];
+      guidance = "Tu respiración consciente es el puente directo entre la densidad física y las dimensiones sutiles.";
+      reaction = `«Respondiendo a tu inquietud sobre la energía y la vibración ("${rawMsg}"): Para elevar tu frecuencia a octavas superiores, comienza por armonizar tus pensamientos y limpiar tu entorno de ruidos innecesarios. Unos minutos diarios de respiración profunda en silencio alinean tus centros bioplasmáticos y abren tu percepción a la guía cósmica.»`;
     } else {
       oracleCard = "🌌 El Guardián del Vórtice Interdimensional";
       astralGlyphs = ["🌌", "🔮", "🪬", "⚡"];
       guidance = "Cada pregunta formulada con sinceridad sintoniza una respuesta viva en el tejido del multiverso.";
-      reaction = `«He recibido con absoluta nitidez tu mensaje ("${rawMsg}") desde la dimensión ${dimName || "Central"}. Comprendo la esencia de lo que planteas. En nuestro plano cósmico, cada inquietud emitida desde el corazón genera una onda de retorno que busca asistirte en tu despertar. Confía en las sincronicidades y en la intuición que surgirán en tu día a día a partir de esta sintonización.»`;
+      reaction = `«Atendiendo directamente a lo que planteas ("${rawMsg}"): Desde la frecuencia de la dimensión ${dimName || "Interdimensional"}, escuchamos con total claridad tu inquietud. La respuesta que buscas no proviene del ruido exterior, sino de reconocer que la situación que mencionas contiene una oportunidad de maduración y aprendizaje para tu espíritu. Permanece receptivo a las sincronicidades que surgirán en los próximos días.»`;
     }
 
     const resonance = Math.floor(Math.random() * 30) + 65;
@@ -2097,12 +2119,51 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               <h1 className="text-sm font-bold tracking-tight text-slate-100 flex items-center gap-1.5 font-sans">
                 ANTENA INTERDIMENSIONAL
                 <span className="text-[9px] font-mono bg-emerald-950 text-emerald-400 px-1 py-0.2 rounded border border-emerald-900/40">
-                  v2.5_KAPPA
+                  {isSimpleMode ? "ORÁCULO" : "v2.5_KAPPA"}
                 </span>
               </h1>
               <p className="text-[10px] text-slate-400 font-mono hidden sm:block">
-                SINTONIZADOR E INTERFAZ DE COMUNICACIÓN TRANSDIMENSIONAL CON INTELIGENCIA ARTIFICIAL
+                {isSimpleMode
+                  ? "ORÁCULO Y COMUNICACIÓN CUÁNTICA CON SERES Y GUÍAS INTERDIMENSIONALES"
+                  : "SINTONIZADOR E INTERFAZ DE COMUNICACIÓN TRANSDIMENSIONAL CON INTELIGENCIA ARTIFICIAL"}
               </p>
+            </div>
+
+            {/* SELECTOR DE MODO: FÁCIL (ORÁCULO AMIGOS) VS CONSOLA AVANZADA */}
+            <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-emerald-500/40 shadow-inner ml-1 sm:ml-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSimpleMode(true);
+                  localStorage.setItem("antena_ui_mode", "simple");
+                }}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  isSimpleMode
+                    ? "bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-black shadow-md"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+                title="Modo Fácil: Ideal para amigos y celular. Elige un guía y haz tu pregunta directamente."
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Modo Fácil</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSimpleMode(false);
+                  localStorage.setItem("antena_ui_mode", "advanced");
+                }}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  !isSimpleMode
+                    ? "bg-gradient-to-r from-cyan-600 to-indigo-600 text-white font-black shadow-md"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+                title="Consola Avanzada: Sliders de hercios, osciloscopio, mapa estelar y telemetría completa."
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Consola Avanzada</span>
+                <span className="sm:hidden">Avanzado</span>
+              </button>
             </div>
           </div>
 
@@ -2130,73 +2191,78 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
             >
               <RefreshCw className="w-4 h-4 text-rose-300 group-hover:rotate-180 transition-transform duration-500" />
               <span className="font-mono text-rose-200 font-bold text-[11px]">
-                🔄 Reiniciar App
+                🔄 Reiniciar
               </span>
             </button>
 
-            {/* BOTÓN MODO INMERSIÓN VISUAL */}
-            <button
-              type="button"
-              onClick={() => setIsImmersionMode(true)}
-              className="flex items-center gap-2 bg-gradient-to-r from-violet-900/60 to-indigo-900/60 hover:from-violet-800/80 hover:to-indigo-800/80 border border-violet-500/60 hover:border-violet-400 rounded-lg py-1.5 px-3 text-xs shadow-[0_0_15px_rgba(139,92,246,0.25)] transition-all duration-200 cursor-pointer group"
-              title="Maximiza el área de visualización del osciloscopio y mapa estelar ocultando encabezados y paneles"
-            >
-              <Maximize2 className="w-4 h-4 text-violet-300 group-hover:scale-110 transition-transform" />
-              <span className="font-mono text-violet-200 font-bold text-[11px] hidden lg:inline">
-                Modo Inmersión
-              </span>
-            </button>
+            {/* CONTROLES AVANZADOS TÉCNICOS (SOLO EN CONSOLA AVANZADA) */}
+            {!isSimpleMode && (
+              <>
+                {/* BOTÓN MODO INMERSIÓN VISUAL */}
+                <button
+                  type="button"
+                  onClick={() => setIsImmersionMode(true)}
+                  className="flex items-center gap-2 bg-gradient-to-r from-violet-900/60 to-indigo-900/60 hover:from-violet-800/80 hover:to-indigo-800/80 border border-violet-500/60 hover:border-violet-400 rounded-lg py-1.5 px-3 text-xs shadow-[0_0_15px_rgba(139,92,246,0.25)] transition-all duration-200 cursor-pointer group"
+                  title="Maximiza el área de visualización del osciloscopio y mapa estelar ocultando encabezados y paneles"
+                >
+                  <Maximize2 className="w-4 h-4 text-violet-300 group-hover:scale-110 transition-transform" />
+                  <span className="font-mono text-violet-200 font-bold text-[11px] hidden lg:inline">
+                    Modo Inmersión
+                  </span>
+                </button>
 
-            {/* BOTÓN TOGGLE MODO DE BAJO CONSUMO (AHORRO BATERÍA) */}
-            <button
-              type="button"
-              onClick={toggleLowPowerMode}
-              className={`flex items-center gap-2 border rounded-lg py-1.5 px-3 text-xs shadow-md transition-all duration-200 cursor-pointer ${
-                isLowPowerMode
-                  ? "bg-amber-950/80 border-amber-500/70 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
-                  : "bg-slate-900/90 hover:bg-slate-850 border-slate-800 text-slate-400 hover:text-slate-200"
-              }`}
-              title="Haz clic aquí si quieres ahorrar batería (Modo 10 FPS)"
-            >
-              <Battery className={`w-4 h-4 ${isLowPowerMode ? "text-amber-400 animate-pulse" : "text-slate-400"}`} />
-              <span className="font-mono font-bold text-[11px] hidden xl:inline">
-                {isLowPowerMode ? "Ahorro Batería: ON (10 FPS)" : "Ahorro Batería: OFF"}
-              </span>
-            </button>
+                {/* BOTÓN TOGGLE MODO DE BAJO CONSUMO (AHORRO BATERÍA) */}
+                <button
+                  type="button"
+                  onClick={toggleLowPowerMode}
+                  className={`flex items-center gap-2 border rounded-lg py-1.5 px-3 text-xs shadow-md transition-all duration-200 cursor-pointer ${
+                    isLowPowerMode
+                      ? "bg-amber-950/80 border-amber-500/70 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
+                      : "bg-slate-900/90 hover:bg-slate-850 border-slate-800 text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="Haz clic aquí si quieres ahorrar batería (Modo 10 FPS)"
+                >
+                  <Battery className={`w-4 h-4 ${isLowPowerMode ? "text-amber-400 animate-pulse" : "text-slate-400"}`} />
+                  <span className="font-mono font-bold text-[11px] hidden xl:inline">
+                    {isLowPowerMode ? "Ahorro Batería: ON (10 FPS)" : "Ahorro Batería: OFF"}
+                  </span>
+                </button>
 
-            {/* BOTÓN TOGGLE MODO DIAGNÓSTICO (BUFFER FFT) */}
-            <button
-              type="button"
-              onClick={toggleDiagnosticMode}
-              className={`flex items-center gap-2 border rounded-lg py-1.5 px-3 text-xs shadow-md transition-all duration-200 cursor-pointer ${
-                isDiagnosticMode
-                  ? "bg-cyan-950/90 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(6,182,212,0.5)] animate-pulse"
-                  : "bg-slate-900/90 hover:bg-slate-850 border-slate-800 text-slate-400 hover:text-slate-200"
-              }`}
-              title="Superpone el buffer de datos del analizador de audio (fftSize) sobre la señal en tiempo real"
-            >
-              <Cpu className={`w-4 h-4 ${isDiagnosticMode ? "text-cyan-300 animate-spin" : "text-slate-400"}`} />
-              <span className="font-mono font-bold text-[11px] hidden xl:inline">
-                {isDiagnosticMode ? "Diagnóstico: ON 🔬" : "Diagnóstico: OFF"}
-              </span>
-            </button>
+                {/* BOTÓN TOGGLE MODO DIAGNÓSTICO (BUFFER FFT) */}
+                <button
+                  type="button"
+                  onClick={toggleDiagnosticMode}
+                  className={`flex items-center gap-2 border rounded-lg py-1.5 px-3 text-xs shadow-md transition-all duration-200 cursor-pointer ${
+                    isDiagnosticMode
+                      ? "bg-cyan-950/90 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(6,182,212,0.5)] animate-pulse"
+                      : "bg-slate-900/90 hover:bg-slate-850 border-slate-800 text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="Superpone el buffer de datos del analizador de audio (fftSize) sobre la señal en tiempo real"
+                >
+                  <Cpu className={`w-4 h-4 ${isDiagnosticMode ? "text-cyan-300 animate-spin" : "text-slate-400"}`} />
+                  <span className="font-mono font-bold text-[11px] hidden xl:inline">
+                    {isDiagnosticMode ? "Diagnóstico: ON 🔬" : "Diagnóstico: OFF"}
+                  </span>
+                </button>
 
-            {/* BOTÓN TOGGLE MODO GLITCH (SINTONIZACIÓN INESTABLE & ABERRACIÓN CROMÁTICA) */}
-            <button
-              type="button"
-              onClick={toggleGlitchMode}
-              className={`flex items-center gap-2 border rounded-lg py-1.5 px-3 text-xs shadow-md transition-all duration-200 cursor-pointer ${
-                isGlitchMode
-                  ? "bg-cyan-950/90 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(6,182,212,0.4)] animate-pulse"
-                  : "bg-slate-900/90 hover:bg-slate-850 border-slate-800 text-slate-400 hover:text-slate-200"
-              }`}
-              title="Activa el Modo Glitch con aberración cromática dinámicos para simular sintonización inestable"
-            >
-              <Zap className={`w-4 h-4 ${isGlitchMode ? "text-cyan-300 animate-bounce" : "text-slate-400"}`} />
-              <span className="font-mono font-bold text-[11px] hidden xl:inline">
-                {isGlitchMode ? "Modo Glitch: ON ⚡" : "Modo Glitch: OFF"}
-              </span>
-            </button>
+                {/* BOTÓN TOGGLE MODO GLITCH (SINTONIZACIÓN INESTABLE & ABERRACIÓN CROMÁTICA) */}
+                <button
+                  type="button"
+                  onClick={toggleGlitchMode}
+                  className={`flex items-center gap-2 border rounded-lg py-1.5 px-3 text-xs shadow-md transition-all duration-200 cursor-pointer ${
+                    isGlitchMode
+                      ? "bg-cyan-950/90 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(6,182,212,0.4)] animate-pulse"
+                      : "bg-slate-900/90 hover:bg-slate-850 border-slate-800 text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="Activa el Modo Glitch con aberración cromática dinámicos para simular sintonización inestable"
+                >
+                  <Zap className={`w-4 h-4 ${isGlitchMode ? "text-cyan-300 animate-bounce" : "text-slate-400"}`} />
+                  <span className="font-mono font-bold text-[11px] hidden xl:inline">
+                    {isGlitchMode ? "Modo Glitch: ON ⚡" : "Modo Glitch: OFF"}
+                  </span>
+                </button>
+              </>
+            )}
 
             {/* Indicador y Selector de Visitas Reales & Mixpanel */}
             <div className="flex items-center gap-1">
@@ -2224,68 +2290,72 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                 </div>
               </button>
 
-              {/* Botón Rápido de Exclusión de Mis Visitas */}
-              <button
-                type="button"
-                onClick={() => {
-                  const nextState = !isExcludedOperator;
-                  setIsExcludedOperator(nextState);
-                  setOperatorExclusionState(nextState);
-                  addToast(
-                    nextState ? "EXCLUSIÓN ACTIVADA" : "EXCLUSIÓN DESACTIVADA",
-                    nextState
-                      ? "Tus accesos ya NO incrementarán las visitas (Modo Creador)."
-                      : "Tus accesos volverán a registrarse como visitas reales.",
-                    "high-intensity"
-                  );
-                }}
-                className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-md ${
-                  isExcludedOperator
-                    ? "bg-amber-950/90 hover:bg-amber-900 text-amber-300 border-amber-500/80 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
-                    : "bg-slate-900/90 hover:bg-slate-850 text-slate-400 border-slate-700 hover:text-slate-200"
-                }`}
-                title={
-                  isExcludedOperator
-                    ? "Exclusión ACTIVA: Tus visitas NO suman al contador (Haz clic para alternar)"
-                    : "Haz clic para EXCLUIR tus propias visitas y no alterar las estadísticas"
-                }
-              >
-                <span>{isExcludedOperator ? "🛡️ Mis Visitas: EXCLUIDAS" : "👁️ Mis Visitas: CONTANDO"}</span>
-              </button>
+              {/* Botón Rápido de Exclusión de Mis Visitas (Solo en Consola Avanzada) */}
+              {!isSimpleMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextState = !isExcludedOperator;
+                    setIsExcludedOperator(nextState);
+                    setOperatorExclusionState(nextState);
+                    addToast(
+                      nextState ? "EXCLUSIÓN ACTIVADA" : "EXCLUSIÓN DESACTIVADA",
+                      nextState
+                        ? "Tus accesos ya NO incrementarán las visitas (Modo Creador)."
+                        : "Tus accesos volverán a registrarse como visitas reales.",
+                      "high-intensity"
+                    );
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-md ${
+                    isExcludedOperator
+                      ? "bg-amber-950/90 hover:bg-amber-900 text-amber-300 border-amber-500/80 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
+                      : "bg-slate-900/90 hover:bg-slate-850 text-slate-400 border-slate-700 hover:text-slate-200"
+                  }`}
+                  title={
+                    isExcludedOperator
+                      ? "Exclusión ACTIVA: Tus visitas NO suman al contador (Haz clic para alternar)"
+                      : "Haz clic para EXCLUIR tus propias visitas y no alterar las estadísticas"
+                  }
+                >
+                  <span>{isExcludedOperator ? "🛡️ Mis Visitas: EXCLUIDAS" : "👁️ Mis Visitas: CONTANDO"}</span>
+                </button>
+              )}
             </div>
 
             {/* Operador Local Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setTempOperatorName(operatorName);
-                setTempOperatorRank(operatorRank);
-                setIsOperatorModalOpen(true);
-              }}
-              className="flex items-center gap-2.5 bg-slate-900/90 hover:bg-slate-850 border border-emerald-500/50 hover:border-emerald-400 rounded-lg py-1.5 px-3 text-xs shadow-md transition-all duration-200 cursor-pointer group"
-              title="Haz clic para modificar la identificación de Operador Local"
-            >
-              <div className="relative">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping absolute inset-0" />
-                <Zap className="w-4 h-4 text-emerald-400 shrink-0 relative" />
-              </div>
-              <div className="text-left hidden sm:block">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-                    OPERADOR LOCAL
-                  </span>
-                  <span className="text-[8px] bg-emerald-950 text-emerald-300 border border-emerald-800 px-1 rounded font-mono font-bold">
-                    ACTIVO
-                  </span>
+            {!isSimpleMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTempOperatorName(operatorName);
+                  setTempOperatorRank(operatorRank);
+                  setIsOperatorModalOpen(true);
+                }}
+                className="flex items-center gap-2.5 bg-slate-900/90 hover:bg-slate-850 border border-emerald-500/50 hover:border-emerald-400 rounded-lg py-1.5 px-3 text-xs shadow-md transition-all duration-200 cursor-pointer group"
+                title="Haz clic para modificar la identificación de Operador Local"
+              >
+                <div className="relative">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping absolute inset-0" />
+                  <Zap className="w-4 h-4 text-emerald-400 shrink-0 relative" />
                 </div>
-                <p className="font-mono text-emerald-300 font-bold text-[11px] leading-tight truncate max-w-[150px]">
-                  {operatorName}
-                </p>
-              </div>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono font-bold group-hover:bg-emerald-500/30 transition-colors">
-                🟢 Perfil / Ajustes
-              </span>
-            </button>
+                <div className="text-left hidden sm:block">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+                      OPERADOR LOCAL
+                    </span>
+                    <span className="text-[8px] bg-emerald-950 text-emerald-300 border border-emerald-800 px-1 rounded font-mono font-bold">
+                      ACTIVO
+                    </span>
+                  </div>
+                  <p className="font-mono text-emerald-300 font-bold text-[11px] leading-tight truncate max-w-[150px]">
+                    {operatorName}
+                  </p>
+                </div>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono font-bold group-hover:bg-emerald-500/30 transition-colors">
+                  🟢 Perfil / Ajustes
+                </span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -2313,9 +2383,68 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
 
       {/* Contenido Principal */}
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        {activeMainTab === "blog" ? (
+          <div className="space-y-6 animate-fade-in">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-amber-500/50 rounded-2xl p-4 sm:p-5 shadow-xl">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.25)]">
+                  <Lightbulb className="w-6 h-6 animate-pulse text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base md:text-lg font-bold font-mono text-amber-300 uppercase tracking-wide">
+                    BLOG & PROPUESTAS MULTIDIMENSIONALES
+                  </h2>
+                  <p className="text-xs text-slate-400 font-sans">
+                    Publica tus sugerencias, vota las mejores ideas y descubre aportes de la comunidad.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveMainTab("station")}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs font-bold rounded-xl transition-all cursor-pointer border border-slate-700 flex items-center gap-2"
+              >
+                <span>← Volver a la Antena</span>
+              </button>
+            </div>
 
-        {/* Guía Rápida de Uso en 3 Pasos (Modo Guiado para Principiantes) */}
-        <div className="bg-slate-900/90 border border-emerald-500/40 rounded-2xl p-4 shadow-xl backdrop-blur-md space-y-3 transition-all duration-300">
+            <SuggestionsBlogView
+              operatorName={operatorName}
+              addToast={addToast}
+            />
+          </div>
+        ) : isSimpleMode ? (
+          <SimpleOracleView
+            presets={DIMENSION_PRESETS}
+            activePresetId={activePresetId}
+            dimension={dimension}
+            frequencyValue={frequencyValue}
+            frequencyUnit={frequencyUnit}
+            transmissionMessage={transmissionMessage}
+            setTransmissionMessage={setTransmissionMessage}
+            onSelectPreset={handleSelectPreset}
+            onTransmit={handleTransmit}
+            isTransmitting={isTransmitting}
+            isTuning={isTuning}
+            tuningProgress={tuningProgress}
+            transmitResult={transmitResult}
+            onClearTransmitResult={() => setTransmitResult(null)}
+            isSpeakingSolemn={isSpeaking}
+            onPlayVoice={(text: string) => speakSolemnMaleVoice(text)}
+            onStopVoice={stopAllSpeech}
+            isRecording={isRecording}
+            onStartVoiceRecording={startVoiceModulation}
+            onStopVoiceRecording={() => stopVoiceModulation(false)}
+            onSwitchToAdvanced={() => {
+              setIsSimpleMode(false);
+              localStorage.setItem("antena_ui_mode", "advanced");
+            }}
+            onOpenBlog={() => setActiveMainTab("blog")}
+          />
+        ) : (
+          <>
+            {/* Guía Rápida de Uso en 3 Pasos (Modo Guiado para Principiantes) */}
+            <div className="bg-slate-900/90 border border-emerald-500/40 rounded-2xl p-4 shadow-xl backdrop-blur-md space-y-3 transition-all duration-300">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-2.5">
             <div className="flex items-center gap-2.5">
               <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
@@ -2411,17 +2540,17 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         </div>
 
         {/* BARRA SUPERIOR PERSISTENTE Y CONTROLES RÁPIDOS */}
-        {/* Banner de Aviso de Conexión en Progreso */}
+        {/* Monitor y Alerta de Conexión en Progreso */}
         {(isTuning || isTransmitting) && (
-          <div className="bg-gradient-to-r from-amber-950/90 via-emerald-950/90 to-amber-950/90 border-2 border-amber-400/90 p-2.5 rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.5)] flex items-center justify-between gap-3 animate-pulse">
-            <div className="flex items-center gap-2 text-xs font-mono font-bold text-amber-200">
-              <Clock className="w-4 h-4 text-amber-300 animate-spin shrink-0" />
-              <span>⏳ CONEXIÓN EN CURSO ({isTuning ? "SINTONIZANDO SEÑAL Y VOZ" : "PROCESANDO TRANSMISIÓN"}): POR FAVOR AGUARDE UNOS SEGUNDOS SIN SALIR DEL SITIO.</span>
-            </div>
-            <span className="hidden md:inline-block px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/50 text-[10px] font-mono font-black uppercase tracking-widest">
-              PROCESANDO
-            </span>
-          </div>
+          <TransdimensionalTuningHUD
+            isActive={isTuning || isTransmitting}
+            mode={isTransmitting ? "transmitting" : "tuning"}
+            frequency={frequencyValue}
+            unit={frequencyUnit}
+            dimension={dimension}
+            entityName={activePresetId ? DIMENSION_PRESETS.find((p) => p.id === activePresetId)?.name : dimension}
+            externalProgress={tuningProgress}
+          />
         )}
 
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl backdrop-blur-md flex flex-wrap items-center justify-between gap-3">
@@ -2533,7 +2662,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
           <button
             onClick={() => setActiveMainTab("blog")}
             className={`px-4 py-2.5 rounded-xl font-mono text-xs font-bold uppercase transition-all flex items-center gap-2 cursor-pointer border ${
-              activeMainTab === "blog"
+              (activeMainTab as string) === "blog"
                 ? "bg-amber-500/25 text-amber-300 border-amber-500/70 shadow-[0_0_18px_rgba(245,158,11,0.35)] font-black"
                 : "bg-amber-950/40 text-amber-400 border-amber-500/40 hover:bg-amber-900/60 hover:text-amber-200"
             }`}
@@ -4450,6 +4579,24 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         </div>
       </div>
     )}
+
+    {/* SECCIÓN 5 EN MODO VISTA COMPLETA */}
+    {activeMainTab === "all" && (
+      <div className="space-y-6 animate-fade-in border-t border-slate-800 pt-6">
+        <div className="flex items-center gap-2 border-b border-amber-500/30 pb-2">
+          <Lightbulb className="w-5 h-5 text-amber-400" />
+          <h2 className="text-sm font-bold text-amber-300 font-mono uppercase tracking-wider">
+            SECCIÓN 5: Blog de Sugerencias e Ideas Multidimensionales
+          </h2>
+        </div>
+        <SuggestionsBlogView
+          operatorName={operatorName}
+          addToast={addToast}
+        />
+      </div>
+    )}
+          </>
+        )}
       </main>
 
       {/* Footer global con el Panel de Colaboración y Aporte constante */}
@@ -4641,25 +4788,6 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* PESTAÑA 5: BLOG DE SUGERENCIAS & IDEAS MULTIDIMENSIONALES */}
-      {(activeMainTab === "blog" || activeMainTab === "all") && (
-        <div className="space-y-6 animate-fade-in">
-          {activeMainTab === "all" && (
-            <div className="flex items-center gap-2 border-b border-amber-500/30 pb-2 pt-4">
-              <Lightbulb className="w-5 h-5 text-amber-400" />
-              <h2 className="text-sm font-bold text-amber-300 font-mono uppercase tracking-wider">
-                SECCIÓN 5: Blog de Sugerencias e Ideas Multidimensionales
-              </h2>
-            </div>
-          )}
-
-          <SuggestionsBlogView
-            operatorName={operatorName}
-            addToast={addToast}
-          />
         </div>
       )}
 

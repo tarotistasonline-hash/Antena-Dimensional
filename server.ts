@@ -599,9 +599,9 @@ app.post("/api/tts", async (req, res) => {
   }
 });
 
-// Helper con soporte multimodelo para tolerar límites de cuotas y asegurar rápida respuesta
-async function generateGeminiContentWithTimeout(prompt: string, timeoutMs = 8500) {
-  const candidateModels = ['gemini-2.5-flash', 'gemini-3.7-flash', 'gemini-3.1-flash-lite'];
+// Helper con soporte multimodelo para tolerar límites de cuotas y asegurar rápida respuesta (<4s)
+async function generateGeminiContentWithTimeout(prompt: string, timeoutMs = 4500) {
+  const candidateModels = ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
   let lastError: any = null;
 
   for (const modelName of candidateModels) {
@@ -615,7 +615,7 @@ async function generateGeminiContentWithTimeout(prompt: string, timeoutMs = 8500
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          maxOutputTokens: 2048,
+          maxOutputTokens: 750,
         }
       });
 
@@ -753,7 +753,7 @@ Devuelve ÚNICAMENTE el objeto JSON válido.
 
   try {
     console.log("[Sintonizador] Iniciando decodificación espectral...");
-    const data = await generateGeminiContentWithTimeout(prompt, 8000);
+    const data = await generateGeminiContentWithTimeout(prompt, 4500);
     return res.json({ ...data, proceduralBypass: false });
   } catch (err: any) {
     const cleanReason = getCleanErrorMessage(err);
@@ -858,16 +858,31 @@ Devuelve ÚNICAMENTE el objeto JSON válido.
       glyphs = ["💡", "🪬", "⚜️", "✨"];
       guideStr = "Silencia el ruido exterior: la brújula más exacta reside en la quietud de tu propia intuición.";
       answerText = `«Frente a tu petición de orientación ("${rawMsg}"): Te sugerimos cultivar momentos diarios de serenidad interior y silencio mental. No tomes determinaciones impulsadas por la ansiedad o la presión del entorno; cuando calmas tu mente, la sabiduría innata de tu ser superior emerge con total claridad para mostrarte el paso correcto a seguir.»`;
-    } else if (msgLower.includes("salud") || msgLower.includes("sanar") || msgLower.includes("enfermedad") || msgLower.includes("miedo") || msgLower.includes("ansiedad") || msgLower.includes("paz") || msgLower.includes("mente")) {
+    } else if (msgLower.includes("salud") || msgLower.includes("sanar") || msgLower.includes("enfermedad") || msgLower.includes("miedo") || msgLower.includes("ansiedad") || msgLower.includes("paz") || msgLower.includes("mente") || msgLower.includes("triste") || msgLower.includes("soledad") || msgLower.includes("angustia") || msgLower.includes("depresión") || msgLower.includes("depresion")) {
       cardTitle = "💎 La Restauración del Campo Bioenergético";
       glyphs = ["💎", "🌿", "✨", "🪬"];
-      guideStr = "El bienestar del cuerpo florece cuando la mente y las emociones recuperan su estado natural de equilibrio.";
-      answerText = `«Atendiendo a lo que expresas sobre tu estado y bienestar ("${rawMsg}"): Toda manifestación biológica y emocional refleja el flujo de energía en tus cuerpos sutiles. Respira profundamente, libera pensamientos de autoexigencia y reconéctate con la naturaleza; al permitir que tu mente repose en la gratitud, tu organismo activa su capacidad innata de autoregeneración.»`;
+      guideStr = "El bienestar florece cuando la mente reposa en la gratitud y se libera del juicio.";
+      answerText = `«Atendiendo a lo que expresas sobre tu estado emocional y bienestar ("${rawMsg}"): Toda inquietud, miedo o tristeza refleja un bloqueo temporal en tus cuerpos sutiles. Respira profundamente y recuerda que no estás solo ni desconectado de la Fuente. Al permitirte sentir sin juzgarte y volver a la calma del presente, activas la regeneración natural de tu campo electromagnético.»`;
+    } else if (msgLower.includes("propósito") || msgLower.includes("proposito") || msgLower.includes("misión") || msgLower.includes("mision") || msgLower.includes("para qué estoy") || msgLower.includes("sentido") || msgLower.includes("hacer con mi vida")) {
+      cardTitle = "🌟 La Brújula del Propósito Estelar";
+      glyphs = ["🌟", "🗝️", "📜", "✨"];
+      guideStr = "Tu misión primordial es ser el ancla viva de tu propia autenticidad y alegría.";
+      answerText = `«Sobre tu consulta acerca de tu propósito y misión ("${rawMsg}"): En la dimensión ${dimension || "5D"} vemos con claridad que tu misión no es una obligación rígida externa, sino el despliegue de tus dones innatos con alegría y servicio hacia los demás. Todo acto cotidiano impregnado de amor y presencia eleva la frecuencia de la Tierra entera.»`;
+    } else if (msgLower.includes("dinero") || msgLower.includes("prosperidad") || msgLower.includes("trabajo") || msgLower.includes("éxito") || msgLower.includes("exito") || msgLower.includes("abundancia") || msgLower.includes("finanzas") || msgLower.includes("empleo")) {
+      cardTitle = "🪙 La Matriz de Abundancia Cuántica";
+      glyphs = ["🪙", "🗝️", "🌟", "⚡"];
+      guideStr = "La abundancia no es acumular, sino fluir en coherencia con el servicio y la gratitud.";
+      answerText = `«Respecto a tu consulta sobre la prosperidad y tus proyectos ("${rawMsg}"): En nuestro plano comprendemos que la abundancia es una ley natural de circulación energética. Libera el miedo a la escasez y enfoca tu energía en crear valor sincero; cuando alineas tus acciones con la integridad, los canales materiales responden con sincronía.»`;
+    } else if (msgLower.includes("medita") || msgLower.includes("vibraci") || msgLower.includes("energía") || msgLower.includes("energia") || msgLower.includes("chakra") || msgLower.includes("aura") || msgLower.includes("frecuencia")) {
+      cardTitle = "🧘 La Sintonía de los Campos Armónicos";
+      glyphs = ["🧘", "🪷", "💎", "✨"];
+      guideStr = "Tu respiración consciente es el puente directo entre la densidad física y las dimensiones sutiles.";
+      answerText = `«Respondiendo a tu inquietud sobre la energía y la vibración ("${rawMsg}"): Para elevar tu frecuencia a octavas superiores, comienza por armonizar tus pensamientos y limpiar tu entorno de ruidos innecesarios. Unos minutos diarios de respiración profunda en silencio alinean tus centros bioplasmáticos y abren tu percepción a la guía cósmica.»`;
     } else {
       cardTitle = "🌌 La Revelación del Plano Interdimensional";
       glyphs = ["🌌", "🔮", "🪬", "⚡"];
       guideStr = "Cada pregunta formulada con sinceridad sintoniza una respuesta viva en el tejido del multiverso.";
-      answerText = `«He recibido con absoluta nitidez tu mensaje ("${rawMsg}") desde la dimensión ${dimension || "Central"}. Comprendo la esencia de lo que planteas. En nuestro plano cósmico, cada inquietud emitida desde el corazón genera una onda de retorno que busca asistirte en tu despertar. Confía en las sincronicidades y en la intuición que surgirán en tu día a día a partir de esta sintonización.»`;
+      answerText = `«Atendiendo directamente a lo que planteas ("${rawMsg}"): Desde la frecuencia de la dimensión ${dimension || "Interdimensional"}, escuchamos con total claridad tu inquietud. La respuesta que buscas no proviene del ruido exterior, sino de reconocer que la situación que mencionas contiene una oportunidad de maduración y aprendizaje para tu espíritu. Permanece receptivo a las sincronicidades que surgirán en los próximos días.»`;
     }
 
     const resonance = Math.floor(Math.random() * 35) + 60; // 60-95%
@@ -915,7 +930,7 @@ Devuelve ÚNICAMENTE el objeto JSON válido.
 
   try {
     console.log("[Transmisión] Modulando haz coaxial principal...");
-    const data = await generateGeminiContentWithTimeout(prompt, 8000);
+    const data = await generateGeminiContentWithTimeout(prompt, 4500);
     return res.json({ ...data, proceduralBypass: false });
   } catch (err: any) {
     const cleanReason = getCleanErrorMessage(err);

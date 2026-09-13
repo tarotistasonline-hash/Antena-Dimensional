@@ -101,22 +101,18 @@ export const isCurrentOperatorExcluded = (): boolean => {
   if (typeof window === "undefined") return false;
   try {
     const params = new URLSearchParams(window.location.search);
-    if (
-      params.get("owner") === "true" ||
-      params.get("creator") === "true" ||
-      params.get("admin") === "true" ||
-      params.get("exclude") === "true"
-    ) {
+    if (params.get("exclude") === "true") {
       setOperatorExclusionState(true);
       return true;
     }
+    if (params.get("include") === "true") {
+      setOperatorExclusionState(false);
+      return false;
+    }
   } catch (e) {}
 
-  return (
-    localStorage.getItem("antena_operator_excluded") === "true" ||
-    localStorage.getItem("antena_exclude_my_visits_v2") === "true" ||
-    localStorage.getItem("antena_exclude_my_visits") === "true"
-  );
+  // Por defecto NO excluir a nadie para que las visitas siempre cuenten
+  return localStorage.getItem("antena_operator_excluded") === "true";
 };
 
 // Activa o desactiva la exclusión del operador
@@ -135,9 +131,12 @@ export const setOperatorExclusionState = (excluded: boolean): boolean => {
 export const fetchServerVisits = async (): Promise<number> => {
   let count = getStoredVisits();
   try {
-    const res = await fetch("/api/visits", {
+    const res = await fetch("/api/visits?t=" + Date.now(), {
       method: "GET",
-      headers: { "Cache-Control": "no-cache" },
+      headers: { 
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache"
+      },
       signal: AbortSignal.timeout(6000),
     });
     if (res.ok) {
@@ -153,17 +152,17 @@ export const fetchServerVisits = async (): Promise<number> => {
   return count;
 };
 
-// Registrar visita (incrementa en el servidor si no está en cooldown o si es forzada)
+// Registrar visita (incrementa en el servidor de forma segura)
 export const registerUniversalVisit = async (force: boolean = false): Promise<number> => {
   let count = getStoredVisits();
   const isExcluded = isCurrentOperatorExcluded();
 
-  // Si el operador activó exclusión voluntaria y no es una acción forzada (+1 de prueba), solo consulta
+  // Si el operador activó exclusión voluntaria explícita y no es forzada, solo consulta
   if (isExcluded && !force) {
     return fetchServerVisits();
   }
 
-  // Comprobar cooldown de 10 segundos entre incrementos automáticos de la misma sesión
+  // Cooldown breve de 2 segundos para evitar rebote de doble clic pero permitir contar en cada recarga
   const now = Date.now();
   let lastTime = 0;
   if (typeof sessionStorage !== "undefined") {
@@ -172,7 +171,7 @@ export const registerUniversalVisit = async (force: boolean = false): Promise<nu
     } catch (e) {}
   }
 
-  const shouldIncrement = force || isNaN(lastTime) || now - lastTime > 10000;
+  const shouldIncrement = force || isNaN(lastTime) || now - lastTime > 2000;
 
   if (shouldIncrement) {
     if (typeof sessionStorage !== "undefined") {
@@ -186,7 +185,10 @@ export const registerUniversalVisit = async (force: boolean = false): Promise<nu
     try {
       const res = await fetch("/api/visits/increment", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache"
+        },
         signal: AbortSignal.timeout(6000),
       });
 
@@ -205,7 +207,7 @@ export const registerUniversalVisit = async (force: boolean = false): Promise<nu
       return count;
     }
   } else {
-    // Si ya incrementó hace menos de 10s, sincroniza con el servidor
+    // Si acaba de incrementar en los últimos 2s, sincroniza el número más reciente
     return fetchServerVisits();
   }
 
