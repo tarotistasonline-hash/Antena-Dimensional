@@ -76,6 +76,7 @@ import { DimensionalJumpOverlay } from "./components/DimensionalJumpOverlay";
 import { radioStatic } from "./radioStatic";
 import { SimpleOracleView } from "./components/SimpleOracleView";
 import { TransdimensionalTuningHUD } from "./components/TransdimensionalTuningHUD";
+import { WELCOME_AUDIO_EXPLANATION } from "./components/WelcomeVoiceGuide";
 
 interface QuantumToast {
   id: string;
@@ -581,6 +582,38 @@ export default function App() {
     }
   };
 
+  // Helper to convert raw PCM16 samples to a standard WAV Blob URL
+  const pcmToWavBlobUrl = (bytes: Uint8Array, sampleRate: number): string => {
+    const numChannels = 1;
+    const bitsPerSample = 16;
+    const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+    const blockAlign = (numChannels * bitsPerSample) / 8;
+    const pcmDataLength = bytes.length;
+    const buffer = new ArrayBuffer(44 + pcmDataLength);
+    const view = new DataView(buffer);
+
+    // RIFF chunk descriptor
+    view.setUint32(0, 0x52494646, false); // "RIFF"
+    view.setUint32(4, 36 + pcmDataLength, true); // File length - 8
+    view.setUint32(8, 0x57415645, false); // "WAVE"
+    // "fmt " sub-chunk
+    view.setUint32(12, 0x666d7420, false); // "fmt "
+    view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
+    view.setUint16(20, 1, true); // AudioFormat (1 for PCM)
+    view.setUint16(22, numChannels, true); // NumChannels
+    view.setUint32(24, sampleRate, true); // SampleRate
+    view.setUint32(28, byteRate, true); // ByteRate
+    view.setUint16(32, blockAlign, true); // BlockAlign
+    view.setUint16(34, bitsPerSample, true); // BitsPerSample
+    // "data" sub-chunk
+    view.setUint32(36, 0x64617461, false); // "data"
+    view.setUint32(40, pcmDataLength, true); // Subchunk2Size
+    new Uint8Array(buffer, 44).set(bytes);
+
+    const blob = new Blob([buffer], { type: "audio/wav" });
+    return URL.createObjectURL(blob);
+  };
+
   // Helper to play base64 PCM audio from Gemini TTS with session validation
   const playBase64Audio = async (base64Data: string, mimeType: string, sessionId: number): Promise<boolean> => {
     // Descartar audio si una nueva petición de voz ya interrumpió este proceso
@@ -598,54 +631,6 @@ export default function App() {
         window.speechSynthesis.cancel();
       }
 
-      if (mimeType.includes("wav") || mimeType.includes("mp3") || mimeType.includes("ogg")) {
-        const blob = new Blob([bytes], { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        activeAudioNodeRef.current = audio;
-
-        // Conectar PannerNode espacial 3D si Web Audio está disponible
-        try {
-          const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-          const audioCtx = new AudioCtx();
-          activeAudioCtxRef.current = audioCtx;
-          const sourceNode = audioCtx.createMediaElementSource(audio);
-          
-          if ("createStereoPanner" in audioCtx) {
-            const panner = audioCtx.createStereoPanner();
-            audio.onplay = () => {
-              const now = audioCtx.currentTime;
-              const dur = audio.duration || 5;
-              panner.pan.setValueAtTime(-0.75, now);
-              panner.pan.linearRampToValueAtTime(0.75, now + dur * 0.5);
-              panner.pan.linearRampToValueAtTime(-0.4, now + dur);
-            };
-            sourceNode.connect(panner);
-            panner.connect(audioCtx.destination);
-          } else {
-            sourceNode.connect(audioCtx.destination);
-          }
-        } catch (e) {
-          // Ignorar y reproducir mediante audio HTML5 nativo
-        }
-
-        audio.onended = () => {
-          setIsSpeaking(false);
-          if (activeAudioNodeRef.current === audio) {
-            activeAudioNodeRef.current = null;
-          }
-        };
-        audio.onerror = () => {
-          setIsSpeaking(false);
-        };
-
-        // Transición suave: apagar el zumbido de sintonización justo cuando inicia el audio de voz
-        radioStatic.stop();
-        setIsSpeaking(true);
-        await audio.play();
-        return true;
-      }
-
       // Dynamic sample rate parsing (Gemini default 24000Hz or 16000Hz)
       let sampleRate = 24000;
       if (mimeType) {
@@ -655,64 +640,81 @@ export default function App() {
         }
       }
 
+      // Estrategia 1: Reproducción universal mediante HTMLAudioElement con contenedor WAV/Blob
+      // Es 100% inmune a restricciones de AudioContext en iframes y navegadores móviles
+      try {
+        const wavUrl = (mimeType.includes("wav") || mimeType.includes("mp3") || mimeType.includes("ogg"))
+          ? URL.createObjectURL(new Blob([bytes], { type: mimeType }))
+          : pcmToWavBlobUrl(bytes, sampleRate);
+
+        const audio = new Audio(wavUrl);
+        activeAudioNodeRef.current = audio;
+
+        audio.onended = () => {
+          setIsSpeaking(false);
+          if (activeAudioNodeRef.current === audio) {
+            activeAudioNodeRef.current = null;
+          }
+          URL.revokeObjectURL(wavUrl);
+        };
+        audio.onerror = (e) => {
+          console.warn("[HTMLAudio Error, pasando a WebAudio/Síntesis]", e);
+          setIsSpeaking(false);
+        };
+
+        // Transición suave: apagar zumbido de sintonización y reproducir
+        radioStatic.stop();
+        setIsSpeaking(true);
+        await audio.play();
+        return true;
+      } catch (audioElErr) {
+        console.warn("[HTMLAudio play() no permitido o falló, intentando Web Audio]:", audioElErr);
+      }
+
+      // Estrategia 2: Web Audio API con AudioBufferSourceNode
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      const audioCtx = new AudioCtx({ sampleRate });
-      activeAudioCtxRef.current = audioCtx;
+      if (AudioCtx) {
+        const audioCtx = new AudioCtx();
+        activeAudioCtxRef.current = audioCtx;
 
-      if (audioCtx.state === "suspended") {
-        await audioCtx.resume();
-      }
-
-      // Garantizar alineación de 16 bits sin RangeError
-      const pcmSamples = Math.floor(bytes.length / 2);
-      const alignedBuffer = new ArrayBuffer(pcmSamples * 2);
-      new Uint8Array(alignedBuffer).set(bytes.subarray(0, pcmSamples * 2));
-      const pcm16 = new Int16Array(alignedBuffer);
-
-      // Añadir 300ms de silencio/margen al final (tail padding)
-      // para evitar que los altavoces/navegador corten el último fonema
-      const tailPadding = Math.floor(sampleRate * 0.3);
-      const float32 = new Float32Array(pcm16.length + tailPadding);
-      for (let i = 0; i < pcm16.length; i++) {
-        float32[i] = pcm16[i] / 32768;
-      }
-
-      const audioBuffer = audioCtx.createBuffer(1, float32.length, sampleRate);
-      audioBuffer.getChannelData(0).set(float32);
-
-      const source = audioCtx.createBufferSource();
-      source.buffer = audioBuffer;
-
-      // Efecto Espacial 3D: PannerNode que hace oscilar suavemente la voz de izquierda a derecha
-      if ("createStereoPanner" in audioCtx) {
-        const panner = audioCtx.createStereoPanner();
-        const duration = audioBuffer.duration;
-        const now = audioCtx.currentTime;
-
-        panner.pan.setValueAtTime(-0.75, now);
-        panner.pan.linearRampToValueAtTime(0.75, now + duration * 0.5);
-        panner.pan.linearRampToValueAtTime(-0.4, now + duration);
-
-        source.connect(panner);
-        panner.connect(audioCtx.destination);
-      } else {
-        source.connect(audioCtx.destination);
-      }
-
-      activeAudioNodeRef.current = source;
-
-      source.onended = () => {
-        setIsSpeaking(false);
-        if (activeAudioNodeRef.current === source) {
-          activeAudioNodeRef.current = null;
+        if (audioCtx.state === "suspended") {
+          await audioCtx.resume();
         }
-      };
 
-      // Detener el zumbido de espera justo cuando arranca la voz procesada
-      radioStatic.stop();
-      setIsSpeaking(true);
-      source.start(0);
-      return true;
+        const pcmSamples = Math.floor(bytes.length / 2);
+        const alignedBuffer = new ArrayBuffer(pcmSamples * 2);
+        new Uint8Array(alignedBuffer).set(bytes.subarray(0, pcmSamples * 2));
+        const pcm16 = new Int16Array(alignedBuffer);
+
+        const tailPadding = Math.floor(sampleRate * 0.3);
+        const float32 = new Float32Array(pcm16.length + tailPadding);
+        for (let i = 0; i < pcm16.length; i++) {
+          float32[i] = pcm16[i] / 32768;
+        }
+
+        const audioBuffer = audioCtx.createBuffer(1, float32.length, sampleRate);
+        audioBuffer.getChannelData(0).set(float32);
+
+        const source = audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioCtx.destination);
+
+        activeAudioNodeRef.current = source;
+
+        source.onended = () => {
+          setIsSpeaking(false);
+          if (activeAudioNodeRef.current === source) {
+            activeAudioNodeRef.current = null;
+          }
+        };
+
+        radioStatic.stop();
+        setIsSpeaking(true);
+        source.start(0);
+        return true;
+      }
+
+      return false;
     } catch (err) {
       console.warn("[TTS Playback Error]:", err);
       radioStatic.stop();
@@ -722,14 +724,25 @@ export default function App() {
   };
 
   // Central speech synthesis function for male voices (alternating or selected profile)
-  const speakSolemnMaleVoice = async (rawText: string) => {
+  const speakSolemnMaleVoice = async (rawText: string, isSpanishAccent = false) => {
     // 1. Detener categóricamente cualquier audio o voz previo antes de iniciar una nueva transmisión
     stopAllSpeech();
 
+    // Si el lector de voz estaba desactivado globalmente, activarlo automáticamente al presionar reproducir
     if (!isVoiceReaderEnabled) {
-      radioStatic.stop();
-      return;
+      setIsVoiceReaderEnabled(true);
     }
+
+    // Desbloquear inmediatamente AudioContext en el hilo del evento de usuario para evitar bloqueos del navegador
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const warmCtx = new AudioCtx();
+        if (warmCtx.state === "suspended") {
+          warmCtx.resume().catch(() => {});
+        }
+      }
+    } catch (e) {}
 
     const currentSessionId = ttsSessionIdRef.current;
 
@@ -748,34 +761,47 @@ export default function App() {
     // Activar zumbido de sintonización para acompañar la generación de la voz
     radioStatic.start();
 
-    // Determinar la variante de voz masculina (Solemne vs Estándar)
+    // Determinar la variante de voz masculina (Solemne vs Estándar vs Bienvenida Español de España/no-neutro)
     toggleMaleVoiceRef.current = !toggleMaleVoiceRef.current;
     let isSolemn = toggleMaleVoiceRef.current;
 
-    if (voiceTone === "solemne-hombre") {
+    if (isSpanishAccent) {
+      isSolemn = false;
+    } else if (voiceTone === "solemne-hombre") {
       isSolemn = true;
     } else if (voiceTone === "estandar" || voiceTone === "latino-neutro") {
       isSolemn = false;
     }
 
-    const variantParam = isSolemn ? "solemne" : "estandar";
+    const variantParam = isSpanishAccent
+      ? "bienvenida-espanol"
+      : isSolemn
+      ? "solemne"
+      : "estandar";
 
     // Si el usuario seleccionó manualmente una voz específica del navegador (y NO una opción automática o de Gemini),
     // saltar la llamada al servidor e ir directo a la síntesis local del navegador
     const isLocalVoiceSelected =
+      !isSpanishAccent &&
       selectedVoiceURI &&
       selectedVoiceURI !== "gemini-solemn" &&
       selectedVoiceURI !== "gemini-standard";
 
     if (!isLocalVoiceSelected) {
-      // 1. PRIMARY ENGINE: Gemini TTS Server API ('Fenrir' para hombre solemne, 'Puck' para hombre estándar)
+      // 1. PRIMARY ENGINE: Gemini TTS Server API ('Puck' con instrucción de acento español o 'Fenrir')
       try {
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text: cleanText,
-            voiceVariant: selectedVoiceURI === "gemini-solemn" ? "solemne" : selectedVoiceURI === "gemini-standard" ? "estandar" : variantParam
+            voiceVariant: isSpanishAccent
+              ? "bienvenida-espanol"
+              : selectedVoiceURI === "gemini-solemn"
+              ? "solemne"
+              : selectedVoiceURI === "gemini-standard"
+              ? "estandar"
+              : variantParam,
           }),
         });
 
@@ -785,7 +811,7 @@ export default function App() {
           const data = await res.json();
           if (data.status === "success" && data.audio) {
             const played = await playBase64Audio(data.audio, data.mimeType || "audio/pcm", currentSessionId);
-            if (played) return; // Reproducido con éxito
+            if (played) return; // Reproducido con éxito mediante audio del servidor
           }
         }
       } catch (e) {
@@ -841,8 +867,16 @@ export default function App() {
 
       let chosenVoice: SpeechSynthesisVoice | null = null;
 
-      // Si el usuario seleccionó una voz específica en la interfaz
-      if (selectedVoiceURI && selectedVoiceURI !== "gemini-solemn" && selectedVoiceURI !== "gemini-standard") {
+      // Si es guía de bienvenida con acento no-neutro (Español de España es-ES o dialecto marcado)
+      if (isSpanishAccent) {
+        const castilianMale = spanishVoices.find((v) =>
+          v.lang.toLowerCase().includes("es-es") && isVoiceMale(v)
+        );
+        const castilianAny = spanishVoices.find((v) =>
+          v.lang.toLowerCase().includes("es-es") && !isVoiceFemale(v)
+        );
+        chosenVoice = castilianMale || castilianAny || spanishVoices.find(isVoiceMale) || null;
+      } else if (selectedVoiceURI && selectedVoiceURI !== "gemini-solemn" && selectedVoiceURI !== "gemini-standard") {
         const found = voices.find((v) => v.voiceURI === selectedVoiceURI);
         if (found) chosenVoice = found;
       }
@@ -913,22 +947,27 @@ export default function App() {
 
         if (chosenVoice) {
           utterance.voice = chosenVoice;
-          if (voiceTone === "latino-neutro" || (chosenVoice.lang.toLowerCase().includes("es-es") && voiceTone !== "alternar")) {
+          if (isSpanishAccent) {
+            utterance.lang = "es-ES";
+          } else if (voiceTone === "latino-neutro" || (chosenVoice.lang.toLowerCase().includes("es-es") && voiceTone !== "alternar")) {
             utterance.lang = "es-MX";
           } else {
             utterance.lang = chosenVoice.lang;
           }
         } else {
-          utterance.lang = "es-MX";
+          utterance.lang = isSpanishAccent ? "es-ES" : "es-MX";
         }
 
-        if (forceLowPitch || isExplicitlyFemale || !isExplicitlyMale) {
+        if (isSpanishAccent) {
+          utterance.pitch = 1.0;
+          utterance.rate = 0.95;
+        } else if (forceLowPitch || isExplicitlyFemale || !isExplicitlyMale) {
           utterance.pitch = isSolemn ? Math.min(customPitchValue, 0.28) : customPitchValue;
+          utterance.rate = isSolemn ? 0.80 : 0.88;
         } else {
           utterance.pitch = isSolemn ? 0.65 : 0.82;
+          utterance.rate = isSolemn ? 0.80 : 0.88;
         }
-
-        utterance.rate = isSolemn ? 0.80 : 0.88;
 
         utterance.onstart = () => {
           radioStatic.stop();
@@ -967,16 +1006,20 @@ export default function App() {
           }
         };
 
+        if (typeof window !== "undefined" && window.speechSynthesis) {
+          window.speechSynthesis.resume();
+        }
         window.speechSynthesis.speak(utterance);
       };
 
-      // Breve retardo de 60ms tras cancel() para asegurar la inicialización del hilo de audio en Chrome/Edge
+      // Breve retardo tras cancel() para asegurar la inicialización del hilo de audio en Chrome/Edge
       setTimeout(() => {
         if (currentSessionId === ttsSessionIdRef.current && typeof window !== "undefined" && window.speechSynthesis) {
+          window.speechSynthesis.resume();
           radioStatic.stop();
           speakNextChunk(0);
         }
-      }, 60);
+      }, 50);
     } catch (e) {
       console.warn("[Speech Fallback Error]:", e);
       radioStatic.stop();
@@ -1016,6 +1059,46 @@ export default function App() {
     
     speakSolemnMaleVoice("Sintonía de prueba. Canal de voz masculina, neutra y solemne. Portadora cuántica estabilizada.");
   };
+
+  // Reproducción automática de la guía de voz al abrir la aplicación
+  useEffect(() => {
+    let hasTriggered = false;
+
+    const playWelcomeGuide = () => {
+      if (hasTriggered) return;
+      hasTriggered = true;
+      speakSolemnMaleVoice(WELCOME_AUDIO_EXPLANATION, true);
+    };
+
+    // 1. Iniciar automáticamente ni bien se abre la aplicación
+    const timer = setTimeout(() => {
+      playWelcomeGuide();
+    }, 400);
+
+    // 2. Si el navegador retiene el audio por la directiva de interacción previa (autoplay),
+    // se reanuda de inmediato con el primer gesto en la ventana.
+    const handleFirstInteraction = () => {
+      cleanup();
+      playWelcomeGuide();
+    };
+
+    const cleanup = () => {
+      window.removeEventListener("pointerdown", handleFirstInteraction);
+      window.removeEventListener("click", handleFirstInteraction);
+      window.removeEventListener("touchstart", handleFirstInteraction);
+      window.removeEventListener("keydown", handleFirstInteraction);
+    };
+
+    window.addEventListener("pointerdown", handleFirstInteraction, { once: true, passive: true });
+    window.addEventListener("click", handleFirstInteraction, { once: true, passive: true });
+    window.addEventListener("touchstart", handleFirstInteraction, { once: true, passive: true });
+    window.addEventListener("keydown", handleFirstInteraction, { once: true, passive: true });
+
+    return () => {
+      clearTimeout(timer);
+      cleanup();
+    };
+  }, []);
   const startVoiceModulation = async () => {
     try {
       setError(null);
@@ -2117,15 +2200,15 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
             </div>
             <div>
               <h1 className="text-sm font-bold tracking-tight text-slate-100 flex items-center gap-1.5 font-sans">
-                ANTENA INTERDIMENSIONAL
-                <span className="text-[9px] font-mono bg-emerald-950 text-emerald-400 px-1 py-0.2 rounded border border-emerald-900/40">
-                  {isSimpleMode ? "ORÁCULO" : "v2.5_KAPPA"}
+                RECEPTOR INTERESTELAR
+                <span className="text-[9px] font-mono bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-700/60 font-black tracking-wider">
+                  {isSimpleMode ? "CONTACTO" : "v2.5_SETI"}
                 </span>
               </h1>
               <p className="text-[10px] text-slate-400 font-mono hidden sm:block">
                 {isSimpleMode
-                  ? "ORÁCULO Y COMUNICACIÓN CUÁNTICA CON SERES Y GUÍAS INTERDIMENSIONALES"
-                  : "SINTONIZADOR E INTERFAZ DE COMUNICACIÓN TRANSDIMENSIONAL CON INTELIGENCIA ARTIFICIAL"}
+                  ? "ESTACIÓN DE CONTACTO Y COMUNICACIÓN CON CIVILIZACIONES EXTRATERRESTRES"
+                  : "SINTONIZADOR DE ANTENAS E INTERFAZ DE COMUNICACIÓN TRANSDIMENSIONAL"}
               </p>
             </div>
 
@@ -2430,7 +2513,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
             transmitResult={transmitResult}
             onClearTransmitResult={() => setTransmitResult(null)}
             isSpeakingSolemn={isSpeaking}
-            onPlayVoice={(text: string) => speakSolemnMaleVoice(text)}
+            onPlayVoice={(text: string, isSpanishAccent?: boolean) => speakSolemnMaleVoice(text, isSpanishAccent)}
             onStopVoice={stopAllSpeech}
             isRecording={isRecording}
             onStartVoiceRecording={startVoiceModulation}
@@ -2452,20 +2535,22 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               </div>
               <div>
                 <h3 className="text-xs font-bold font-mono text-emerald-300 uppercase tracking-wider flex items-center gap-2">
-                  💡 GUÍA RÁPIDA: CÓMO USAR LA ANTENA EN 3 PASOS
+                  💡 GUÍA RÁPIDA: CÓMO USAR RECEPTOR INTERESTELAR EN 3 PASOS
                 </h3>
                 <p className="text-[11px] text-slate-400 font-sans">
-                  Sigue esta guía interactiva para establecer tu primera comunicación interdimensional de forma sencilla.
+                  Sigue esta guía interactiva para establecer tu primera comunicación interdimensional y con seres extraterrestres de forma sencilla.
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsGuideOpen(!isGuideOpen)}
-              className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 font-mono text-[10px] font-bold uppercase transition-all cursor-pointer border border-slate-700 shrink-0 shadow-sm"
-            >
-              {isGuideOpen ? "▲ MINIMIZAR GUÍA" : "▼ MOSTRAR GUÍA INTERACTIVA"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsGuideOpen(!isGuideOpen)}
+                className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 font-mono text-[10px] font-bold uppercase transition-all cursor-pointer border border-slate-700 shrink-0 shadow-sm"
+              >
+                {isGuideOpen ? "▲ MINIMIZAR GUÍA" : "▼ MOSTRAR GUÍA INTERACTIVA"}
+              </button>
+            </div>
           </div>
 
           {isGuideOpen && (

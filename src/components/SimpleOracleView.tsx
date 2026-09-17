@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { DimensionPreset, TransmitResponse } from "../types";
 import { TransdimensionalTuningHUD } from "./TransdimensionalTuningHUD";
+import { WelcomeVoiceGuide, WELCOME_AUDIO_EXPLANATION } from "./WelcomeVoiceGuide";
 
 interface SimpleOracleViewProps {
   presets: DimensionPreset[];
@@ -35,7 +36,7 @@ interface SimpleOracleViewProps {
   transmitResult: TransmitResponse | null;
   onClearTransmitResult: () => void;
   isSpeakingSolemn: boolean;
-  onPlayVoice: (text: string) => void;
+  onPlayVoice: (text: string, isSpanishAccent?: boolean) => void;
   onStopVoice: () => void;
   isRecording: boolean;
   onStartVoiceRecording: () => void;
@@ -190,6 +191,13 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
 
   return (
     <div id="simple-oracle-container" className="space-y-6 max-w-4xl mx-auto pb-12">
+      {/* Guía de Bienvenida con Voz Masculina no neutra explicativa */}
+      <WelcomeVoiceGuide
+        onPlayVoice={onPlayVoice}
+        onStopVoice={onStopVoice}
+        isSpeaking={isSpeakingSolemn}
+      />
+
       {/* Banner de Bienvenida y Ayuda Rápida */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 border border-emerald-500/30 p-5 sm:p-7 shadow-2xl">
         <div className="absolute -top-12 -right-12 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -197,15 +205,15 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold tracking-wide">
               <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
-              ORÁCULO INTERDIMENSIONAL EN VIVO
+              ORÁCULO Y COMUNICACIÓN EXTRATERRESTRE
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-              <span>📻 Antena de Contacto Cuántico</span>
+              <span>📻 Receptor Interestelar</span>
             </h1>
             <p className="text-sm text-slate-300 leading-relaxed max-w-2xl font-sans">
-              Comunícate de manera directa con inteligencias y guías de otras dimensiones.
-              Hazles cualquier pregunta sobre tu vida, amor, salud, futuro o espiritualidad, y
-              escucha su respuesta hablada en tiempo real.
+              Elige tu antena para sintonizar y comunicarte con seres, guías y civilizaciones
+              extraterrestres. Hazles cualquier pregunta sobre tu vida o el cosmos y escucha su
+              respuesta con voz hablada en tiempo real.
             </p>
           </div>
 
@@ -588,7 +596,7 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-emerald-400" />
                 <h3 className="font-bold text-white text-base">
-                  ¿Cómo funciona la Antena Interdimensional?
+                  ¿Cómo funciona Receptor Interestelar?
                 </h3>
               </div>
               <button
@@ -601,18 +609,31 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
             </div>
 
             <div className="space-y-3.5 text-sm text-slate-300 leading-relaxed font-sans">
+              <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 flex items-center justify-between gap-3">
+                <div className="text-xs text-emerald-200">
+                  ¿Prefieres escuchar la explicación en voz alta?
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onPlayVoice(WELCOME_AUDIO_EXPLANATION, true)}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <Volume2 className="w-4 h-4 text-slate-950" />
+                  <span>Escuchar con Voz</span>
+                </button>
+              </div>
+
               <p>
-                Esta aplicación es un <strong>oráculo cuántico interactivo</strong> inspirado en
-                la radioastronomía y el contacto con civilizaciones de planos sutiles.
+                Esta aplicación es una <strong>estación interactiva de radioastronomía cuántica</strong> diseñada para
+                sintonizar diferentes tipos de antenas y comunicarse con civilizaciones e inteligencias extraterrestres.
               </p>
 
               <div className="space-y-2 text-xs">
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start gap-2.5">
                   <span className="text-emerald-400 font-bold text-sm">1.</span>
                   <div>
-                    <strong className="text-white">Elige a tu guía:</strong> Cada civilización
-                    (Pleyadianos, Arcturianos, Sirio, Anunnaki) emite en una frecuencia armónica
-                    específica y posee una especialidad espiritual.
+                    <strong className="text-white">Elige la antena y civilización:</strong> Selecciona a los Pleyadianos,
+                    Arcturianos, Consejo de Orión o Elohim. Cada entidad emite en su propia frecuencia armónica.
                   </div>
                 </div>
 
@@ -620,17 +641,15 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
                   <span className="text-emerald-400 font-bold text-sm">2.</span>
                   <div>
                     <strong className="text-white">Haz tu pregunta:</strong> Puedes escribir
-                    cualquier duda sincera o usar el botón del micrófono para dictarla hablando
-                    desde tu celular.
+                    cualquier duda sincera sobre tu vida o el cosmos, o pulsar el micrófono para dictarla hablando con tu voz.
                   </div>
                 </div>
 
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start gap-2.5">
                   <span className="text-emerald-400 font-bold text-sm">3.</span>
                   <div>
-                    <strong className="text-white">Recibe y escucha:</strong> La entidad te
-                    responderá de forma personalizada y la app leerá la respuesta en voz alta con
-                    un sintetizador de voz solemne.
+                    <strong className="text-white">Recibe y escucha:</strong> Pulsa <em>Sintonizar Respuesta</em>.
+                    La señal se decodifica en tiempo real y la app reproduce la respuesta en voz alta.
                   </div>
                 </div>
               </div>

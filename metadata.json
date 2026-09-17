@@ -1,6 +1,6 @@
 {
-  "name": "Antena Interdimensional",
-  "description": "Una antena receptora y transmisora interactiva que sintoniza otras dimensiones, mundos paralelos e inteligencias extraterrestres, con registro en Google Sheets.",
+  "name": "Receptor Interestelar",
+  "description": "Una estación y antena interactiva para sintonizar y comunicarse con seres y civilizaciones extraterrestres a través de frecuencias cuánticas y voz hablada en tiempo real.",
   "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

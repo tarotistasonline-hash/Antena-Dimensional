@@ -541,9 +541,12 @@ app.post("/api/tts", async (req, res) => {
     return res.status(400).json({ status: "error", message: "Texto limpio vacío" });
   }
 
+  const isWelcomeGuide = voiceVariant === "bienvenida-espanol";
   const isSolemn = voiceVariant === "solemne";
-  const selectedVoiceName = isSolemn ? "Fenrir" : "Puck";
-  const promptInstruction = `Lee íntegramente y de principio a fin, en español neutro, sin omitir ni cortar ninguna palabra, el siguiente mensaje con voz de hombre ${isSolemn ? "muy grave, solemne, sobria y pausada" : "clara, serena y profesional"}: "${cleanText}"`;
+  const selectedVoiceName = isWelcomeGuide ? "Puck" : isSolemn ? "Fenrir" : "Puck";
+  const promptInstruction = isWelcomeGuide
+    ? `Lee íntegramente y de principio a fin, en español de España o con marcado acento hispano natural y cálido (no robótico ni neutro despersonalizado), con voz masculina cordial, amigable y explicativa: "${cleanText}"`
+    : `Lee íntegramente y de principio a fin, en español, sin omitir ni cortar ninguna palabra, el siguiente mensaje con voz de hombre ${isSolemn ? "muy grave, solemne, sobria y pausada" : "clara, serena y profesional"}: "${cleanText}"`;
 
   const ttsModels = ["gemini-3.1-flash-tts-preview", "gemini-3.6-flash"];
 
