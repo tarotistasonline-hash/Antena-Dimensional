@@ -14,11 +14,13 @@ import {
   ChevronRight,
   MessageSquare,
   Globe2,
-  Share2
+  Share2,
+  X,
+  Clock,
+  AlertTriangle
 } from "lucide-react";
-import { DimensionPreset, TransmitResponse } from "../types";
+import { DimensionPreset, TransmitResponse, SignalResponse } from "../types";
 import { TransdimensionalTuningHUD } from "./TransdimensionalTuningHUD";
-import { WelcomeVoiceGuide, WELCOME_AUDIO_EXPLANATION } from "./WelcomeVoiceGuide";
 
 interface SimpleOracleViewProps {
   presets: DimensionPreset[];
@@ -33,10 +35,14 @@ interface SimpleOracleViewProps {
   isTransmitting: boolean;
   isTuning?: boolean;
   tuningProgress?: number;
+  tuningResult?: SignalResponse | null;
+  onClearTuningResult?: () => void;
+  selectedAntenna?: string;
+  onOpenAntennaModal?: () => void;
   transmitResult: TransmitResponse | null;
   onClearTransmitResult: () => void;
   isSpeakingSolemn: boolean;
-  onPlayVoice: (text: string, isSpanishAccent?: boolean) => void;
+  onPlayVoice: (text: string, isSpanishAccent?: boolean, isNeutralWelcome?: boolean) => void;
   onStopVoice: () => void;
   isRecording: boolean;
   onStartVoiceRecording: () => void;
@@ -103,13 +109,11 @@ const FRIENDLY_ENTITIES = [
 ];
 
 const SUGGESTED_QUESTIONS = [
-  "¿Qué mensaje tienen para mi vida en este momento?",
-  "¿Cómo puedo superar la ansiedad y encontrar paz interior?",
-  "¿Cuál es mi propósito o misión en la Tierra?",
-  "¿Existe vida después de la muerte física?",
-  "¿Cómo atraer abundancia y prosperidad a mis proyectos?",
   "¿Quiénes son ustedes y cómo nos ven a los humanos?",
-  "¿Qué debo hacer ante las dudas y decisiones difíciles?",
+  "¿Cuál es el propósito o misión en la tierra de nosotros los humanos?",
+  "¿Los conoceremos en algún momento?",
+  "¿Qué mensajes tienen para darnos?",
+  "¿Existe vida después de la muerte?",
 ];
 
 export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
@@ -125,6 +129,10 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
   isTransmitting,
   isTuning = false,
   tuningProgress,
+  tuningResult,
+  onClearTuningResult,
+  selectedAntenna,
+  onOpenAntennaModal,
   transmitResult,
   onClearTransmitResult,
   isSpeakingSolemn,
@@ -191,13 +199,6 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
 
   return (
     <div id="simple-oracle-container" className="space-y-6 max-w-4xl mx-auto pb-12">
-      {/* Guía de Bienvenida con Voz Masculina no neutra explicativa */}
-      <WelcomeVoiceGuide
-        onPlayVoice={onPlayVoice}
-        onStopVoice={onStopVoice}
-        isSpeaking={isSpeakingSolemn}
-      />
-
       {/* Banner de Bienvenida y Ayuda Rápida */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 border border-emerald-500/30 p-5 sm:p-7 shadow-2xl">
         <div className="absolute -top-12 -right-12 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -205,15 +206,13 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold tracking-wide">
               <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
-              ORÁCULO Y COMUNICACIÓN EXTRATERRESTRE
+              COMUNICACIÓN Y CONTACTO INTERESTELAR
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
               <span>📻 Receptor Interestelar</span>
             </h1>
             <p className="text-sm text-slate-300 leading-relaxed max-w-2xl font-sans">
-              Elige tu antena para sintonizar y comunicarte con seres, guías y civilizaciones
-              extraterrestres. Hazles cualquier pregunta sobre tu vida o el cosmos y escucha su
-              respuesta con voz hablada en tiempo real.
+              Elige tu antena o civilización para establecer contacto. Al elegirla, aguarde unos momentos mientras se acopla la frecuencia portadora y la civilización emitirá un mensaje en directo. Luego podrás hacerles cualquier pregunta con voz o texto.
             </p>
           </div>
 
@@ -239,6 +238,121 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* AVISO CLARO DE ESPERA MIENTRAS SE ESTABLECE LA COMUNICACIÓN CON LA CIVILIZACIÓN */}
+      {isTuning && (
+        <div
+          id="tuning-waiting-notice"
+          className="rounded-2xl bg-amber-950/85 border-2 border-amber-400 p-5 sm:p-6 shadow-[0_0_35px_rgba(245,158,11,0.35)] animate-in fade-in duration-200 space-y-3"
+        >
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-400/80 flex items-center justify-center shrink-0 shadow-inner">
+              <Radio className="w-6 h-6 text-amber-300 animate-pulse" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/30 border border-amber-400 text-[10px] font-mono font-black text-amber-200 uppercase tracking-widest animate-pulse">
+                  ● ACOPLANDO ANTENA CON {selectedEntity.title.toUpperCase()}
+                </span>
+                <span className="text-xs font-mono text-amber-300 font-bold">
+                  {frequencyValue} {frequencyUnit}
+                </span>
+              </div>
+              <h4 className="text-base sm:text-lg font-black text-white">
+                Sintonizando canal con {selectedEntity.title}...
+              </h4>
+              <p className="text-xs sm:text-sm text-amber-100 font-sans leading-relaxed">
+                <strong className="text-amber-300 font-black">Por favor aguarde hasta que se establezca la comunicación.</strong> La antena está calibrando la portadora cuántica para recibir la emisión en directo de la civilización elegida.
+              </p>
+            </div>
+          </div>
+          <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-amber-400/40 p-0.5">
+            <div
+              className="bg-gradient-to-r from-amber-400 via-emerald-400 to-cyan-400 h-full rounded-full transition-all duration-150 animate-pulse"
+              style={{ width: `${Math.min(99, Math.max(15, Math.round(tuningProgress || 65)))}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* MENSAJE EMITIDO POR LA CIVILIZACIÓN ELEGIDA AL ACOPLAR LA ANTENA */}
+      {tuningResult && !isTuning && !transmitResult && (
+        <div
+          id="civilization-broadcast-card"
+          className="rounded-2xl bg-gradient-to-b from-slate-900 via-slate-950 to-indigo-950 border-2 border-emerald-400 p-5 sm:p-7 shadow-[0_0_35px_rgba(16,185,129,0.3)] space-y-4 animate-in fade-in duration-300"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-500/30 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center text-2xl shadow-inner">
+                {selectedEntity.emoji}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/60 text-[10px] font-mono font-bold text-emerald-300 uppercase tracking-widest animate-pulse">
+                    ● COMUNICACIÓN ESTABLECIDA
+                  </span>
+                  <span className="text-xs font-mono text-cyan-300">
+                    Resonancia: {tuningResult.resonance}%
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-white mt-0.5">
+                  Mensaje emitido por {tuningResult.entity || selectedEntity.title}
+                </h3>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onPlayVoice(tuningResult.message)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/60 text-xs font-bold cursor-pointer transition-all shadow-sm"
+                title="Escuchar nuevamente este mensaje hablado"
+              >
+                <Volume2 className="w-4 h-4 text-emerald-400" />
+                <span>Escuchar mensaje</span>
+              </button>
+              {onClearTuningResult && (
+                <button
+                  type="button"
+                  onClick={onClearTuningResult}
+                  className="p-1.5 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition-colors"
+                  title="Cerrar mensaje"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Mensaje de la civilización */}
+          <div className="p-4 sm:p-5 rounded-xl bg-slate-950/80 border border-emerald-500/30 text-slate-100 font-sans text-sm sm:text-base leading-relaxed relative shadow-inner">
+            <span className="text-[10px] font-mono text-emerald-400 font-bold block mb-1.5 uppercase tracking-wider">
+              📡 TRANSMISIÓN DESDE {dimension}:
+            </span>
+            <p className="italic text-emerald-100 font-medium">
+              "{tuningResult.message}"
+            </p>
+            {tuningResult.guidance && (
+              <div className="mt-3 pt-3 border-t border-slate-800/80 text-xs text-slate-300 flex items-start gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-amber-300">Mensaje clave de la civilización: </strong>
+                  {tuningResult.guidance}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 font-mono">
+            <span>
+              Antena acoplada: <strong className="text-slate-200">{selectedAntenna || selectedEntity.title}</strong> ({frequencyValue} {frequencyUnit})
+            </span>
+            <span className="text-emerald-300 font-sans font-bold">
+              ↓ Si lo deseas, puedes hacerles tu propia pregunta en el Paso 2
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Si hay una respuesta activa de la entidad, mostrarla arriba de forma destacada */}
       {transmitResult && (
@@ -289,13 +403,13 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
               <p className="whitespace-pre-line">{transmitResult.reaction}</p>
             </div>
 
-            {/* Consejo o Guía del Oráculo */}
+            {/* Consejo o Guía */}
             {transmitResult.guidance && (
               <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-200">
                 <Sparkles className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                 <div>
                   <h4 className="text-xs font-bold font-mono uppercase tracking-wider text-emerald-400 mb-1">
-                    CLAVE O CONSEJO DEL ORÁCULO
+                    REFLEXIÓN O TRANSMISIÓN CLAVE
                   </h4>
                   <p className="text-sm text-emerald-100 leading-normal">
                     {transmitResult.guidance}
@@ -344,20 +458,37 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
         </div>
       )}
 
-      {/* PASO 1: Selección de Entidad / Guía */}
+      {/* PASO 1: Selección de Antena y Civilización */}
       <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 sm:p-6 shadow-xl space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 font-black text-xs flex items-center justify-center border border-emerald-500/40">
               1
             </div>
-            <h3 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
-              Elige con quién deseas comunicarte
-            </h3>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
+                Elige la antena y civilización con quién comunicarte
+              </h3>
+              <p className="text-xs text-slate-400 font-sans mt-0.5">
+                Al seleccionar una civilización, aguarde mientras se establece la comunicación; la civilización emitirá su mensaje en directo.
+              </p>
+            </div>
           </div>
-          <span className="text-xs font-mono text-slate-400 hidden sm:inline">
-            Toca una entidad para sintonizarla
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-slate-400 hidden sm:inline">
+              Toca una entidad para sintonizarla
+            </span>
+            {onOpenAntennaModal && (
+              <button
+                type="button"
+                onClick={onOpenAntennaModal}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-mono font-bold transition-all cursor-pointer self-start sm:self-auto shrink-0"
+              >
+                <Radio className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Modulador de Antena</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Grid de Entidades amigables */}
@@ -609,20 +740,6 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
             </div>
 
             <div className="space-y-3.5 text-sm text-slate-300 leading-relaxed font-sans">
-              <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 flex items-center justify-between gap-3">
-                <div className="text-xs text-emerald-200">
-                  ¿Prefieres escuchar la explicación en voz alta?
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onPlayVoice(WELCOME_AUDIO_EXPLANATION, true)}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
-                >
-                  <Volume2 className="w-4 h-4 text-slate-950" />
-                  <span>Escuchar con Voz</span>
-                </button>
-              </div>
-
               <p>
                 Esta aplicación es una <strong>estación interactiva de radioastronomía cuántica</strong> diseñada para
                 sintonizar diferentes tipos de antenas y comunicarse con civilizaciones e inteligencias extraterrestres.

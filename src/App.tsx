@@ -150,7 +150,7 @@ export default function App() {
   // Voice Reader state (Speech Synthesis)
   const [isVoiceReaderEnabled, setIsVoiceReaderEnabled] = useState(true);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [voiceTone, setVoiceTone] = useState<"alternar" | "solemne-hombre" | "estandar" | "latino-neutro">("solemne-hombre");
+  const [voiceTone, setVoiceTone] = useState<"alternar" | "solemne-hombre" | "estandar" | "latino-neutro">("latino-neutro");
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>("");
   const [forceLowPitch, setForceLowPitch] = useState<boolean>(true);
@@ -642,22 +642,23 @@ export default function App() {
 
       // Estrategia 1: Reproducción universal mediante HTMLAudioElement con contenedor WAV/Blob
       // Es 100% inmune a restricciones de AudioContext en iframes y navegadores móviles
+      let audioEl: HTMLAudioElement | null = null;
       try {
         const wavUrl = (mimeType.includes("wav") || mimeType.includes("mp3") || mimeType.includes("ogg"))
           ? URL.createObjectURL(new Blob([bytes], { type: mimeType }))
           : pcmToWavBlobUrl(bytes, sampleRate);
 
-        const audio = new Audio(wavUrl);
-        activeAudioNodeRef.current = audio;
+        audioEl = new Audio(wavUrl);
+        activeAudioNodeRef.current = audioEl;
 
-        audio.onended = () => {
+        audioEl.onended = () => {
           setIsSpeaking(false);
-          if (activeAudioNodeRef.current === audio) {
+          if (activeAudioNodeRef.current === audioEl) {
             activeAudioNodeRef.current = null;
           }
           URL.revokeObjectURL(wavUrl);
         };
-        audio.onerror = (e) => {
+        audioEl.onerror = (e) => {
           console.warn("[HTMLAudio Error, pasando a WebAudio/Síntesis]", e);
           setIsSpeaking(false);
         };
@@ -665,9 +666,13 @@ export default function App() {
         // Transición suave: apagar zumbido de sintonización y reproducir
         radioStatic.stop();
         setIsSpeaking(true);
-        await audio.play();
+        await audioEl.play();
         return true;
       } catch (audioElErr) {
+        setIsSpeaking(false);
+        if (activeAudioNodeRef.current === audioEl) {
+          activeAudioNodeRef.current = null;
+        }
         console.warn("[HTMLAudio play() no permitido o falló, intentando Web Audio]:", audioElErr);
       }
 
@@ -724,7 +729,11 @@ export default function App() {
   };
 
   // Central speech synthesis function for male voices (alternating or selected profile)
-  const speakSolemnMaleVoice = async (rawText: string, isSpanishAccent = false) => {
+  const speakSolemnMaleVoice = async (
+    rawText: string,
+    isSpanishAccent = false,
+    isNeutralWelcome = false
+  ) => {
     // 1. Detener categóricamente cualquier audio o voz previo antes de iniciar una nueva transmisión
     stopAllSpeech();
 
@@ -761,41 +770,46 @@ export default function App() {
     // Activar zumbido de sintonización para acompañar la generación de la voz
     radioStatic.start();
 
-    // Determinar la variante de voz masculina (Solemne vs Estándar vs Bienvenida Español de España/no-neutro)
+    // Determinar la variante de voz masculina (Solemne vs Estándar vs Bienvenida Neutro)
     toggleMaleVoiceRef.current = !toggleMaleVoiceRef.current;
     let isSolemn = toggleMaleVoiceRef.current;
 
-    if (isSpanishAccent) {
-      isSolemn = false;
-    } else if (voiceTone === "solemne-hombre") {
+    if (isNeutralWelcome || voiceTone === "latino-neutro" || voiceTone === "solemne-hombre") {
       isSolemn = true;
-    } else if (voiceTone === "estandar" || voiceTone === "latino-neutro") {
+    } else if (isSpanishAccent) {
+      isSolemn = false;
+    } else if (voiceTone === "estandar") {
       isSolemn = false;
     }
 
-    const variantParam = isSpanishAccent
+    const variantParam = isNeutralWelcome
+      ? "bienvenida-neutro"
+      : isSpanishAccent
       ? "bienvenida-espanol"
       : isSolemn
       ? "solemne"
       : "estandar";
 
-    // Si el usuario seleccionó manualmente una voz específica del navegador (y NO una opción automática o de Gemini),
-    // saltar la llamada al servidor e ir directo a la síntesis local del navegador
+    // Para la guía de bienvenida o si el usuario seleccionó una voz local específica:
+    // ir DIRECTO a la síntesis de voz en el navegador con latencia 0ms y sin depender de cuotas de red
     const isLocalVoiceSelected =
-      !isSpanishAccent &&
-      selectedVoiceURI &&
-      selectedVoiceURI !== "gemini-solemn" &&
-      selectedVoiceURI !== "gemini-standard";
+      isNeutralWelcome ||
+      (!isSpanishAccent &&
+        selectedVoiceURI &&
+        selectedVoiceURI !== "gemini-solemn" &&
+        selectedVoiceURI !== "gemini-standard");
 
     if (!isLocalVoiceSelected) {
-      // 1. PRIMARY ENGINE: Gemini TTS Server API ('Puck' con instrucción de acento español o 'Fenrir')
+      // 1. PRIMARY ENGINE: Gemini TTS Server API ('Charon' o 'Puck' con instrucción de acento neutro o 'Fenrir')
       try {
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text: cleanText,
-            voiceVariant: isSpanishAccent
+            voiceVariant: isNeutralWelcome
+              ? "bienvenida-neutro"
+              : isSpanishAccent
               ? "bienvenida-espanol"
               : selectedVoiceURI === "gemini-solemn"
               ? "solemne"
@@ -830,7 +844,21 @@ export default function App() {
     try {
       window.speechSynthesis.cancel();
 
-      const voices = window.speechSynthesis.getVoices();
+      let voices = window.speechSynthesis.getVoices();
+      if (voices.length === 0) {
+        // En navegadores Chromium, getVoices() puede demorar unos milisegundos en inicializarse
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => resolve(), 200);
+          const handleVoices = () => {
+            window.speechSynthesis.removeEventListener("voiceschanged", handleVoices);
+            clearTimeout(timer);
+            resolve();
+          };
+          window.speechSynthesis.addEventListener("voiceschanged", handleVoices);
+        });
+        voices = window.speechSynthesis.getVoices();
+      }
+
       const spanishVoices = voices.filter((v) => v.lang.toLowerCase().startsWith("es"));
 
       const femaleKeywords = [
@@ -849,7 +877,8 @@ export default function App() {
         "fernando", "felipe", "alberto", "mario", "javier", "sergio", "manuel",
         "hector", "héctor", "hugo", "ramon", "ramón", "emilio", "ignacio", "arturo",
         "gustavo", "tomas", "tomás", "pablo online", "microsoft jorge", "microsoft raul",
-        "google español de estados unidos"
+        "google español de estados unidos", "enrique", "alvaro", "guy", "standard-b",
+        "standard-c", "wavenet-b", "wavenet-c", "neural2-b", "neural2-c"
       ];
 
       const isVoiceFemale = (v: SpeechSynthesisVoice) => {
@@ -867,8 +896,19 @@ export default function App() {
 
       let chosenVoice: SpeechSynthesisVoice | null = null;
 
-      // Si es guía de bienvenida con acento no-neutro (Español de España es-ES o dialecto marcado)
-      if (isSpanishAccent) {
+      // Si es guía de bienvenida con acento neutro (o perfil latino neutro)
+      if (isNeutralWelcome || voiceTone === "latino-neutro") {
+        const latinoMale = spanishVoices.find((v) =>
+          isVoiceMale(v) &&
+          ["es-mx", "es-us", "es-419", "es-co", "es-cl", "es-ar", "es-cr", "es-pe"].some((l) =>
+            v.lang.toLowerCase().includes(l)
+          )
+        );
+        const nonSpainMale = spanishVoices.find((v) =>
+          isVoiceMale(v) && !v.lang.toLowerCase().includes("es-es")
+        );
+        chosenVoice = latinoMale || nonSpainMale || spanishVoices.find(isVoiceMale) || null;
+      } else if (isSpanishAccent) {
         const castilianMale = spanishVoices.find((v) =>
           v.lang.toLowerCase().includes("es-es") && isVoiceMale(v)
         );
@@ -886,7 +926,7 @@ export default function App() {
         const explicitMale = spanishVoices.filter(isVoiceMale);
 
         if (explicitMale.length > 0) {
-          if (voiceTone === "latino-neutro") {
+          if (voiceTone === "latino-neutro" || isNeutralWelcome) {
             const latinoMale = explicitMale.find((v) =>
               ["es-mx", "es-us", "es-419", "es-ar", "es-co", "es-cl"].some((l) => v.lang.toLowerCase().includes(l))
             );
@@ -899,7 +939,7 @@ export default function App() {
           // Filtrar voces explícitamente femeninas
           const nonFemale = spanishVoices.filter((v) => !isVoiceFemale(v));
           if (nonFemale.length > 0) {
-            if (voiceTone === "latino-neutro") {
+            if (voiceTone === "latino-neutro" || isNeutralWelcome) {
               const latinoNonFemale = nonFemale.find((v) =>
                 ["es-mx", "es-us", "es-419", "es-ar", "es-co", "es-cl"].some((l) => v.lang.toLowerCase().includes(l))
               );
@@ -947,9 +987,11 @@ export default function App() {
 
         if (chosenVoice) {
           utterance.voice = chosenVoice;
-          if (isSpanishAccent) {
+          if (isNeutralWelcome || voiceTone === "latino-neutro") {
+            utterance.lang = "es-MX";
+          } else if (isSpanishAccent) {
             utterance.lang = "es-ES";
-          } else if (voiceTone === "latino-neutro" || (chosenVoice.lang.toLowerCase().includes("es-es") && voiceTone !== "alternar")) {
+          } else if (chosenVoice.lang.toLowerCase().includes("es-es") && voiceTone !== "alternar") {
             utterance.lang = "es-MX";
           } else {
             utterance.lang = chosenVoice.lang;
@@ -958,7 +1000,15 @@ export default function App() {
           utterance.lang = isSpanishAccent ? "es-ES" : "es-MX";
         }
 
-        if (isSpanishAccent) {
+        if (isNeutralWelcome || voiceTone === "latino-neutro") {
+          // Voz masculina solemne, profunda y con acento neutro
+          if (forceLowPitch || isExplicitlyFemale || !isExplicitlyMale) {
+            utterance.pitch = Math.min(customPitchValue, 0.28);
+          } else {
+            utterance.pitch = 0.65;
+          }
+          utterance.rate = 0.82;
+        } else if (isSpanishAccent) {
           utterance.pitch = 1.0;
           utterance.rate = 0.95;
         } else if (forceLowPitch || isExplicitlyFemale || !isExplicitlyMale) {
@@ -1060,26 +1110,62 @@ export default function App() {
     speakSolemnMaleVoice("Sintonía de prueba. Canal de voz masculina, neutra y solemne. Portadora cuántica estabilizada.");
   };
 
-  // Reproducción automática de la guía de voz al abrir la aplicación
+  // Reproducción inmediata de la voz de bienvenida y explicación al abrir la aplicación (voz masculina acento neutro)
   useEffect(() => {
     let hasTriggered = false;
 
-    const playWelcomeGuide = () => {
+    const playWelcomeGuide = async () => {
       if (hasTriggered) return;
       hasTriggered = true;
-      speakSolemnMaleVoice(WELCOME_AUDIO_EXPLANATION, true);
+
+      // Desbloquear AudioContext en caso de estar disponible
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const warmCtx = new AudioCtx();
+          if (warmCtx.state === "suspended") {
+            warmCtx.resume().catch(() => {});
+          }
+        }
+      } catch (e) {}
+
+      try {
+        await speakSolemnMaleVoice(WELCOME_AUDIO_EXPLANATION, false, true);
+      } catch (err) {
+        console.warn("[Welcome Voice Error]:", err);
+      }
     };
 
-    // 1. Iniciar automáticamente ni bien se abre la aplicación
-    const timer = setTimeout(() => {
-      playWelcomeGuide();
-    }, 400);
+    // 1. Iniciar inmediatamente al abrir la aplicación (0ms)
+    playWelcomeGuide();
 
-    // 2. Si el navegador retiene el audio por la directiva de interacción previa (autoplay),
-    // se reanuda de inmediato con el primer gesto en la ventana.
+    // 2. Si las voces del navegador tardan unos milisegundos en cargarse, reactivar de inmediato al estar listas
+    const handleVoicesReady = () => {
+      const isCurrentlySpeaking =
+        (typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.speaking) ||
+        activeAudioNodeRef.current !== null;
+
+      if (!isCurrentlySpeaking) {
+        hasTriggered = false;
+        playWelcomeGuide();
+      }
+    };
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.addEventListener("voiceschanged", handleVoicesReady, { once: true });
+    }
+
+    // 3. Si el navegador retiene el audio por la directiva de autoplay,
+    // se reanuda de inmediato con el primer gesto o interacción en la ventana.
     const handleFirstInteraction = () => {
+      const isCurrentlySpeaking =
+        (typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.speaking) ||
+        activeAudioNodeRef.current !== null;
+
+      if (!isCurrentlySpeaking) {
+        hasTriggered = false;
+        playWelcomeGuide();
+      }
       cleanup();
-      playWelcomeGuide();
     };
 
     const cleanup = () => {
@@ -1087,15 +1173,23 @@ export default function App() {
       window.removeEventListener("click", handleFirstInteraction);
       window.removeEventListener("touchstart", handleFirstInteraction);
       window.removeEventListener("keydown", handleFirstInteraction);
+      window.removeEventListener("pointermove", handleFirstInteraction);
+      window.removeEventListener("scroll", handleFirstInteraction);
+      window.removeEventListener("focus", handleFirstInteraction);
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.removeEventListener("voiceschanged", handleVoicesReady);
+      }
     };
 
-    window.addEventListener("pointerdown", handleFirstInteraction, { once: true, passive: true });
-    window.addEventListener("click", handleFirstInteraction, { once: true, passive: true });
-    window.addEventListener("touchstart", handleFirstInteraction, { once: true, passive: true });
-    window.addEventListener("keydown", handleFirstInteraction, { once: true, passive: true });
+    window.addEventListener("pointerdown", handleFirstInteraction, { passive: true });
+    window.addEventListener("click", handleFirstInteraction, { passive: true });
+    window.addEventListener("touchstart", handleFirstInteraction, { passive: true });
+    window.addEventListener("keydown", handleFirstInteraction, { passive: true });
+    window.addEventListener("pointermove", handleFirstInteraction, { passive: true, once: true });
+    window.addEventListener("scroll", handleFirstInteraction, { passive: true, once: true });
+    window.addEventListener("focus", handleFirstInteraction, { passive: true, once: true });
 
     return () => {
-      clearTimeout(timer);
       cleanup();
     };
   }, []);
@@ -1781,6 +1875,28 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
       setFrequencyUnit(freqUnit);
     }
 
+    // Auto-acoplar la antena física correspondiente a la civilización elegida
+    let matchedAntenna = antennaType;
+    if (preset.id === "arcturus-963") {
+      matchedAntenna = "Resonador Cristalino de Arcturus (Acoplamiento Telepático 9D // 963 Hz)";
+      setAntennaType(matchedAntenna);
+    } else if (preset.id === "nibiru-anunnaki") {
+      matchedAntenna = "Antena Piramidal Anunnaki (Monolito Oro-Cuneiforme // Nibiru)";
+      setAntennaType(matchedAntenna);
+    } else if (preset.id === "orion-council" || preset.id === "sirius-enki") {
+      matchedAntenna = "Resonador Catenario de Nibiru (Matriz Escalar Anunnaki)";
+      setAntennaType(matchedAntenna);
+    } else if (preset.id === "whisper-void") {
+      matchedAntenna = "Lazo Escalar (Escudo Magnético)";
+      setAntennaType(matchedAntenna);
+    } else if (preset.id === "mirror-earth") {
+      matchedAntenna = "Sintonizador Cuántico de Franjas (Mundis Paralelos)";
+      setAntennaType(matchedAntenna);
+    }
+
+    // Limpiar respuesta previa para mostrar la nueva emisión de la civilización elegida
+    setTransmitResult(null);
+
     // Scroll suave hacia el osciloscopio o encabezado de señal
     const visualizerEl = document.getElementById("signal-header") || document.body;
     if (visualizerEl) {
@@ -1794,6 +1910,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
       freqValue: freqVal,
       freqUnit: freqUnit,
       entityName: preset.name,
+      antennaType: matchedAntenna,
     });
   };
 
@@ -1811,12 +1928,51 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
     setActiveTab("receptor");
     addToast("ANTENA RECONFIGURADA", `Modulador acoplado: ${newAntennaName}. Sintonizando canal...`, "high-intensity");
 
+    // Asociar a la civilización correspondiente según la antena elegida
+    let targetPreset = DIMENSION_PRESETS[0];
+    const lower = newAntennaName.toLowerCase();
+    if (lower.includes("arcturus")) {
+      targetPreset = DIMENSION_PRESETS.find((p) => p.id === "arcturus-963") || targetPreset;
+    } else if (lower.includes("piramidal") || lower.includes("nibiru")) {
+      targetPreset = DIMENSION_PRESETS.find((p) => p.id === "nibiru-anunnaki") || targetPreset;
+    } else if (lower.includes("catenario") || lower.includes("orion")) {
+      targetPreset = DIMENSION_PRESETS.find((p) => p.id === "orion-council") || targetPreset;
+    } else if (lower.includes("sirius") || lower.includes("enki")) {
+      targetPreset = DIMENSION_PRESETS.find((p) => p.id === "sirius-enki") || targetPreset;
+    } else if (lower.includes("taquion") || lower.includes("franja")) {
+      targetPreset = DIMENSION_PRESETS.find((p) => p.id === "mirror-earth") || targetPreset;
+    } else if (lower.includes("escalar")) {
+      targetPreset = DIMENSION_PRESETS.find((p) => p.id === "whisper-void") || targetPreset;
+    }
+
+    setActivePresetId(targetPreset.id);
+    setDimension(targetPreset.coordinates);
+    const parts = targetPreset.frequency.split(" ");
+    let freqVal = frequencyValue;
+    let freqUnit = frequencyUnit;
+    if (parts.length === 2) {
+      freqVal = parseFloat(parts[0]) || frequencyValue;
+      freqUnit = parts[1] as any;
+      setFrequencyValue(freqVal);
+      setFrequencyUnit(freqUnit);
+    }
+
+    // Limpiar respuesta previa para mostrar el mensaje emitido por la civilización acoplada
+    setTransmitResult(null);
+
     const visualizerEl = document.getElementById("signal-header") || document.body;
     if (visualizerEl) {
       visualizerEl.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
-    await executeTune({ antennaType: newAntennaName });
+    await executeTune({
+      presetId: targetPreset.id,
+      coordinates: targetPreset.coordinates,
+      freqValue: freqVal,
+      freqUnit: freqUnit,
+      entityName: targetPreset.name,
+      antennaType: newAntennaName,
+    });
   };
 
   // Función para realizar un paso de Escaneo Continuo
@@ -2510,10 +2666,16 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
             isTransmitting={isTransmitting}
             isTuning={isTuning}
             tuningProgress={tuningProgress}
+            tuningResult={tuningResult}
+            onClearTuningResult={() => setTuningResult(null)}
+            selectedAntenna={antennaType}
+            onOpenAntennaModal={() => setIsAntennaModalOpen(true)}
             transmitResult={transmitResult}
             onClearTransmitResult={() => setTransmitResult(null)}
             isSpeakingSolemn={isSpeaking}
-            onPlayVoice={(text: string, isSpanishAccent?: boolean) => speakSolemnMaleVoice(text, isSpanishAccent)}
+            onPlayVoice={(text: string, isSpanishAccent?: boolean, isNeutralWelcome?: boolean) =>
+              speakSolemnMaleVoice(text, isSpanishAccent, isNeutralWelcome ?? true)
+            }
             onStopVoice={stopAllSpeech}
             isRecording={isRecording}
             onStartVoiceRecording={startVoiceModulation}

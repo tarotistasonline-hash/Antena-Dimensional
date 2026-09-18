@@ -2,32 +2,20 @@ import React, { useState, useEffect } from "react";
 import { Volume2, Radio } from "lucide-react";
 
 export const WELCOME_AUDIO_EXPLANATION =
-  "¡Bienvenido a Receptor Interestelar! Esta aplicación es tu estación de radio cuántica para contactar con seres y civilizaciones extraterrestres. Usarla es muy fácil: Paso uno, elige arriba con qué ser o civilización deseas comunicarte, como los Pleyadianos o el Consejo de Orión. Paso dos, escribe o dicta tu pregunta con el micrófono. Y paso tres, presiona el botón Sintonizar Respuesta. Aguarda unos cuatro segundos mientras la señal viaja por el cosmos y escucharás su mensaje hablado en directo. ¡Comienza ahora haciendo tu primera pregunta!";
+  "¡Bienvenido a Receptor Interestelar! Esta aplicación es tu estación de radio cuántica para contactar con seres y civilizaciones extraterrestres. Usarla es muy fácil: Paso uno, elige arriba la antena y la civilización con la que deseas comunicarte. Al elegirla, aguarda unos instantes hasta que se establezca la comunicación y la civilización emitirá su mensaje en directo. Paso dos, escribe o dicta tu pregunta con el micrófono. Y paso tres, presiona Sintonizar Respuesta para escuchar su respuesta hablada. ¡Comienza ahora seleccionando tu antena o civilización!";
 
 interface WelcomeVoiceGuideProps {
-  onPlayVoice: (text: string, isSpanishAccent?: boolean) => void;
+  onPlayVoice: (text: string, isSpanishAccent?: boolean, isNeutralWelcome?: boolean) => void;
   onStopVoice: () => void;
   isSpeaking: boolean;
 }
 
 export const WelcomeVoiceGuide: React.FC<WelcomeVoiceGuideProps> = ({
+  onPlayVoice,
   onStopVoice,
   isSpeaking,
 }) => {
   const [isOpen, setIsOpen] = useState(true);
-  const [hasDismissed, setHasDismissed] = useState(false);
-
-  // Comprobar si el usuario ya cerró la bienvenida anteriormente
-  useEffect(() => {
-    try {
-      const dismissed = localStorage.getItem("receptor_welcome_dismissed");
-      if (dismissed === "true") {
-        setHasDismissed(true);
-        setIsOpen(false);
-      }
-    } catch (e) {}
-  }, []);
-
   const [showTranscript, setShowTranscript] = useState(false);
 
   const handleClose = () => {
@@ -35,13 +23,24 @@ export const WelcomeVoiceGuide: React.FC<WelcomeVoiceGuideProps> = ({
       onStopVoice();
     }
     setIsOpen(false);
-    try {
-      localStorage.setItem("receptor_welcome_dismissed", "true");
-    } catch (e) {}
   };
 
   if (!isOpen) {
-    return null;
+    return (
+      <div className="flex justify-end pb-2">
+        <button
+          type="button"
+          onClick={() => {
+            setIsOpen(true);
+            onPlayVoice(WELCOME_AUDIO_EXPLANATION, false, true);
+          }}
+          className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900/90 border border-emerald-500/40 text-emerald-300 text-xs font-mono font-bold cursor-pointer transition-all shadow-md"
+        >
+          <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Ver y escuchar guía de bienvenida (Voz neutra)</span>
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -102,7 +101,7 @@ export const WelcomeVoiceGuide: React.FC<WelcomeVoiceGuideProps> = ({
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-400 text-emerald-300 text-xs font-mono shadow-sm">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
               <Volume2 className="w-4 h-4 text-emerald-400 animate-pulse" />
-              <span className="font-bold">Guía en audio activa</span>
+              <span className="font-bold">Guía en voz activa (Masculina neutra)</span>
               <button
                 type="button"
                 onClick={onStopVoice}
@@ -112,7 +111,17 @@ export const WelcomeVoiceGuide: React.FC<WelcomeVoiceGuideProps> = ({
                 Silenciar
               </button>
             </div>
-          ) : null}
+          ) : (
+            <button
+              type="button"
+              onClick={() => onPlayVoice(WELCOME_AUDIO_EXPLANATION, false, true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 text-xs font-mono font-bold shadow-md cursor-pointer transition-all"
+              title="Escuchar la explicación con voz masculina neutra"
+            >
+              <Volume2 className="w-4 h-4 text-slate-950" />
+              <span>Escuchar Explicación (Voz Neutra)</span>
+            </button>
+          )}
 
           <div className="flex items-center gap-3">
             <button
