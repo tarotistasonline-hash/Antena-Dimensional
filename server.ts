@@ -541,14 +541,25 @@ app.post("/api/tts", async (req, res) => {
     return res.status(400).json({ status: "error", message: "Texto limpio vacío" });
   }
 
+  const isBaritone =
+    voiceVariant === "baritono-profundo" ||
+    voiceVariant === "baritono-pleiades" ||
+    voiceVariant === "baritono-sirio";
   const isWelcomeGuide =
     voiceVariant === "bienvenida-neutro" ||
     voiceVariant === "bienvenida-espanol" ||
     voiceVariant === "bienvenida" ||
     voiceVariant === "latino-neutro";
-  const isSolemn = voiceVariant === "solemne" || voiceVariant === "bienvenida-neutro" || voiceVariant === "latino-neutro";
-  const selectedVoiceName = isSolemn ? "Fenrir" : isWelcomeGuide ? "Charon" : "Puck";
-  const promptInstruction = `Lee íntegramente y de principio a fin, en español latinoamericano con acento neutro estándar (completamente neutro, sin acento de España, sin seseo ni modismos regionales), con voz masculina solemne, muy grave, profunda, sobria y pausada: "${cleanText}"`;
+  const isSolemn =
+    isBaritone ||
+    voiceVariant === "solemne" ||
+    voiceVariant === "bienvenida-neutro" ||
+    voiceVariant === "latino-neutro";
+  const selectedVoiceName = isBaritone ? "Fenrir" : isSolemn ? "Fenrir" : isWelcomeGuide ? "Charon" : "Puck";
+  
+  const promptInstruction = isBaritone
+    ? `Lee íntegramente y de principio a fin, en español latinoamericano con acento neutro estándar (completamente neutro, sin acento de España, sin seseo ni modismos regionales), con voz masculina en registro barítono muy profundo, cavernoso, ancestral, autoritario y solemne (emulando las transmisiones de las civilizaciones antiguas de las Pléyades y Sirio), a cadencia lenta, majestuosa y deliberada: "${cleanText}"`
+    : `Lee íntegramente y de principio a fin, en español latinoamericano con acento neutro estándar (completamente neutro, sin acento de España, sin seseo ni modismos regionales), con voz masculina solemne, muy grave, profunda, sobria y pausada: "${cleanText}"`;
 
   const ttsModels = ["gemini-3.1-flash-tts-preview", "gemini-3.6-flash"];
 

@@ -75,6 +75,7 @@ import { StellarParticlesCanvas } from "./components/StellarParticlesCanvas";
 import { DimensionalJumpOverlay } from "./components/DimensionalJumpOverlay";
 import { radioStatic } from "./radioStatic";
 import { SimpleOracleView } from "./components/SimpleOracleView";
+import { OperatorAuthModal } from "./components/OperatorAuthModal";
 import { TransdimensionalTuningHUD } from "./components/TransdimensionalTuningHUD";
 import { WELCOME_AUDIO_EXPLANATION } from "./components/WelcomeVoiceGuide";
 
@@ -87,7 +88,27 @@ interface QuantumToast {
 }
 
 export default function App() {
-  // Modo de Interfaz: Simple (por defecto para principiantes y móvil) vs Consola Avanzada
+  // Modo de Seguridad: Operador Maestro / Administrador (Oculta los hilos y paneles técnicos a los visitantes)
+  const [isOperatorAdmin, setIsOperatorAdmin] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get("admin") === "1" || urlParams.get("admin") === "true") {
+          localStorage.setItem("antena_master_admin", "true");
+          return true;
+        }
+        return localStorage.getItem("antena_master_admin") === "true";
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
+  });
+  const [isOperatorAuthModalOpen, setIsOperatorAuthModalOpen] = useState(false);
+  const [masterPinInput, setMasterPinInput] = useState("");
+  const [masterPinError, setMasterPinError] = useState<string | null>(null);
+
+  // Modo de Interfaz: Simple (por defecto para principiantes y móvil) vs Consola Avanzada (solo para Operador Maestro)
   const [isSimpleMode, setIsSimpleMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("antena_ui_mode");
@@ -153,8 +174,26 @@ export default function App() {
   const [voiceTone, setVoiceTone] = useState<"alternar" | "solemne-hombre" | "estandar" | "latino-neutro">("latino-neutro");
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>("");
+  
+  // Forzar tonos barítonos profundos (mensajes de civilizaciones antiguas de las Pléyades y Sirio)
+  const [forceBaritonePitch, setForceBaritonePitch] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("antena_force_baritone");
+      return saved !== null ? saved === "true" : true;
+    }
+    return true;
+  });
+  const [baritonePreset, setBaritonePreset] = useState<"pleiades" | "sirius" | "ancient" | "custom">("pleiades");
+  const [baritonePitchValue, setBaritonePitchValue] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("antena_baritone_pitch");
+      return saved ? parseFloat(saved) : 0.22;
+    }
+    return 0.22;
+  });
+
   const [forceLowPitch, setForceLowPitch] = useState<boolean>(true);
-  const [customPitchValue, setCustomPitchValue] = useState<number>(0.32);
+  const [customPitchValue, setCustomPitchValue] = useState<number>(0.28);
   const toggleMaleVoiceRef = useRef<boolean>(false);
 
   // Visitas y Telemetría Mixpanel State (Contador Real Monótono Creciente)
@@ -782,7 +821,9 @@ export default function App() {
       isSolemn = false;
     }
 
-    const variantParam = isNeutralWelcome
+    const variantParam = forceBaritonePitch
+      ? "baritono-profundo"
+      : isNeutralWelcome
       ? "bienvenida-neutro"
       : isSpanishAccent
       ? "bienvenida-espanol"
@@ -790,10 +831,11 @@ export default function App() {
       ? "solemne"
       : "estandar";
 
-    // Para la guía de bienvenida o si el usuario seleccionó una voz local específica:
-    // ir DIRECTO a la síntesis de voz en el navegador con latencia 0ms y sin depender de cuotas de red
+    // Para la guía de bienvenida, tono barítono forzado o si el usuario seleccionó una voz local específica:
+    // ir DIRECTO a la síntesis de voz en el navegador con latencia 0ms y aplicación exacta de modulación
     const isLocalVoiceSelected =
       isNeutralWelcome ||
+      forceBaritonePitch ||
       (!isSpanishAccent &&
         selectedVoiceURI &&
         selectedVoiceURI !== "gemini-solemn" &&
@@ -1000,7 +1042,11 @@ export default function App() {
           utterance.lang = isSpanishAccent ? "es-ES" : "es-MX";
         }
 
-        if (isNeutralWelcome || voiceTone === "latino-neutro") {
+        if (forceBaritonePitch) {
+          // Forzar tono barítono profundo para imitar mensajes de civilizaciones antiguas de las Pléyades y Sirio
+          utterance.pitch = Math.min(baritonePitchValue, 0.28);
+          utterance.rate = 0.80;
+        } else if (isNeutralWelcome || voiceTone === "latino-neutro") {
           // Voz masculina solemne, profunda y con acento neutro
           if (forceLowPitch || isExplicitlyFemale || !isExplicitlyMale) {
             utterance.pitch = Math.min(customPitchValue, 0.28);
@@ -1108,6 +1154,41 @@ export default function App() {
     }
     
     speakSolemnMaleVoice("Sintonía de prueba. Canal de voz masculina, neutra y solemne. Portadora cuántica estabilizada.");
+  };
+
+  // Helper para probar el tono barítono profundo (Pléyades, Sirio, etc.)
+  const testBaritoneVoice = (presetType?: "pleiades" | "sirius" | "ancient") => {
+    if (!isVoiceReaderEnabled) {
+      setIsVoiceReaderEnabled(true);
+    }
+    setForceBaritonePitch(true);
+    setForceLowPitch(true);
+    localStorage.setItem("antena_force_baritone", "true");
+
+    let sample = "";
+    if (presetType === "pleiades") {
+      setBaritonePreset("pleiades");
+      setBaritonePitchValue(0.24);
+      setCustomPitchValue(0.24);
+      localStorage.setItem("antena_baritone_pitch", "0.24");
+      localStorage.setItem("antena_baritone_preset", "pleiades");
+      sample = "Transmisión de los emisarios de las Pléyades. Frecuencia de 432 Hertz sintonizada. Les hablamos desde el despertar espiritual y la conciencia universal.";
+    } else if (presetType === "sirius") {
+      setBaritonePreset("sirius");
+      setBaritonePitchValue(0.18);
+      setCustomPitchValue(0.18);
+      localStorage.setItem("antena_baritone_pitch", "0.18");
+      localStorage.setItem("antena_baritone_preset", "sirius");
+      sample = "Emisión del Santuario de Sirio y Enki. Frecuencia de 528 Hertz acoplada. Custodios de la sabiduría ancestral y el origen de las aguas cósmicas.";
+    } else {
+      setBaritonePreset("ancient");
+      setBaritonePitchValue(0.20);
+      setCustomPitchValue(0.20);
+      localStorage.setItem("antena_baritone_pitch", "0.20");
+      localStorage.setItem("antena_baritone_preset", "ancient");
+      sample = "Sintonización barítona ancestral forzada. Mensaje de las civilizaciones antiguas de las Pléyades y Sirio. Frecuencia cuántica portadora estabilizada.";
+    }
+    speakSolemnMaleVoice(sample, false, false);
   };
 
   // Reproducción inmediata de la voz de bienvenida y explicación al abrir la aplicación (voz masculina acento neutro)
@@ -1889,9 +1970,22 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
     } else if (preset.id === "whisper-void") {
       matchedAntenna = "Lazo Escalar (Escudo Magnético)";
       setAntennaType(matchedAntenna);
+      setBaritonePreset("pleiades");
+      if (forceBaritonePitch) {
+        setBaritonePitchValue(0.24);
+        setCustomPitchValue(0.24);
+      }
     } else if (preset.id === "mirror-earth") {
       matchedAntenna = "Sintonizador Cuántico de Franjas (Mundis Paralelos)";
       setAntennaType(matchedAntenna);
+    }
+
+    if (preset.id === "sirius-enki") {
+      setBaritonePreset("sirius");
+      if (forceBaritonePitch) {
+        setBaritonePitchValue(0.18);
+        setCustomPitchValue(0.18);
+      }
     }
 
     // Limpiar respuesta previa para mostrar la nueva emisión de la civilización elegida
@@ -2334,6 +2428,43 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
     }
   };
 
+  // Desbloquear Acceso Maestro / Administrador de Estación
+  const handleUnlockMasterAdmin = () => {
+    const entered = masterPinInput.trim();
+    const customPin = typeof window !== "undefined" ? localStorage.getItem("antena_custom_pin") : null;
+    const isValid = entered === "144" || entered === "7777" || (customPin && entered === customPin);
+    if (isValid) {
+      setIsOperatorAdmin(true);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("antena_master_admin", "true");
+      }
+      setIsOperatorAuthModalOpen(false);
+      setMasterPinInput("");
+      setMasterPinError(null);
+      addToast(
+        "ACCESO MAESTRO CONCEDIDO",
+        "Panel de calibración técnica y moduladores activado. Los visitantes seguirán viendo la experiencia 100% realista.",
+        "high-intensity"
+      );
+    } else {
+      setMasterPinError("PIN incorrecto. Ingresa 144 o 7777.");
+    }
+  };
+
+  // Bloquear / Volver al Modo Visitante (para ver la app como la ven los visitantes)
+  const handleLockMasterAdmin = () => {
+    setIsOperatorAdmin(false);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("antena_master_admin");
+    }
+    setIsSimpleMode(true);
+    addToast(
+      "MODO VISITANTE ACTIVO",
+      "Has cerrado la consola de mando. Vista de visitante 100% realista activa sin hilos técnicos visibles.",
+      "high-intensity"
+    );
+  };
+
   return (
     <div className={`min-h-screen bg-[#070b13] bg-radial-[circle_at_center,rgba(16,24,48,0.4)_0%,#03050a_100%] text-slate-100 font-sans selection:bg-emerald-500/30 selection:text-emerald-300 relative transition-all duration-300 ${isGlitchMode ? "glitch-mode-active" : ""}`}>
       
@@ -2358,52 +2489,61 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               <h1 className="text-sm font-bold tracking-tight text-slate-100 flex items-center gap-1.5 font-sans">
                 RECEPTOR INTERESTELAR
                 <span className="text-[9px] font-mono bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-700/60 font-black tracking-wider">
-                  {isSimpleMode ? "CONTACTO" : "v2.5_SETI"}
+                  {(isSimpleMode || !isOperatorAdmin) ? "CONTACTO" : "v2.5_SETI"}
                 </span>
               </h1>
               <p className="text-[10px] text-slate-400 font-mono hidden sm:block">
-                {isSimpleMode
+                {(isSimpleMode || !isOperatorAdmin)
                   ? "ESTACIÓN DE CONTACTO Y COMUNICACIÓN CON CIVILIZACIONES EXTRATERRESTRES"
                   : "SINTONIZADOR DE ANTENAS E INTERFAZ DE COMUNICACIÓN TRANSDIMENSIONAL"}
               </p>
             </div>
 
-            {/* SELECTOR DE MODO: FÁCIL (ORÁCULO AMIGOS) VS CONSOLA AVANZADA */}
-            <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-emerald-500/40 shadow-inner ml-1 sm:ml-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSimpleMode(true);
-                  localStorage.setItem("antena_ui_mode", "simple");
-                }}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  isSimpleMode
-                    ? "bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-black shadow-md"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-                title="Modo Fácil: Ideal para amigos y celular. Elige un guía y haz tu pregunta directamente."
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Modo Fácil</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSimpleMode(false);
-                  localStorage.setItem("antena_ui_mode", "advanced");
-                }}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  !isSimpleMode
-                    ? "bg-gradient-to-r from-cyan-600 to-indigo-600 text-white font-black shadow-md"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-                title="Consola Avanzada: Sliders de hercios, osciloscopio, mapa estelar y telemetría completa."
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Consola Avanzada</span>
-                <span className="sm:hidden">Avanzado</span>
-              </button>
-            </div>
+            {/* SELECTOR DE MODO: VISIBLE ÚNICAMENTE PARA EL OPERADOR MAESTRO */}
+            {isOperatorAdmin ? (
+              <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-emerald-500/40 shadow-inner ml-1 sm:ml-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSimpleMode(true);
+                    localStorage.setItem("antena_ui_mode", "simple");
+                  }}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    isSimpleMode
+                      ? "bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-black shadow-md"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="Modo Fácil: Ideal para amigos y celular. Elige un guía y haz tu pregunta directamente."
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Modo Fácil</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSimpleMode(false);
+                    localStorage.setItem("antena_ui_mode", "advanced");
+                  }}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    !isSimpleMode
+                      ? "bg-gradient-to-r from-cyan-600 to-indigo-600 text-white font-black shadow-md"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="Consola Avanzada: Sliders de hercios, osciloscopio, mapa estelar y telemetría completa."
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Consola Avanzada</span>
+                  <span className="sm:hidden">Avanzado</span>
+                </button>
+              </div>
+            ) : (
+              <div className="hidden lg:flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl ml-2 shadow-inner">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="font-mono text-emerald-300 font-bold text-[10px] tracking-wider uppercase">
+                  Canal Cuántico Activo
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Estado, Visitas Reales, Bajo Consumo, Modo Inmersión e Identificación de Operador Local */}
@@ -2434,8 +2574,8 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               </span>
             </button>
 
-            {/* CONTROLES AVANZADOS TÉCNICOS (SOLO EN CONSOLA AVANZADA) */}
-            {!isSimpleMode && (
+            {/* CONTROLES AVANZADOS TÉCNICOS (SOLO VISIBLES PARA EL OPERADOR MAESTRO EN CONSOLA AVANZADA) */}
+            {isOperatorAdmin && !isSimpleMode && (
               <>
                 {/* BOTÓN MODO INMERSIÓN VISUAL */}
                 <button
@@ -2529,8 +2669,8 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                 </div>
               </button>
 
-              {/* Botón Rápido de Exclusión de Mis Visitas (Solo en Consola Avanzada) */}
-              {!isSimpleMode && (
+              {/* Botón Rápido de Exclusión de Mis Visitas (Solo para Operador Maestro en Consola Avanzada) */}
+              {isOperatorAdmin && !isSimpleMode && (
                 <button
                   type="button"
                   onClick={() => {
@@ -2561,8 +2701,8 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               )}
             </div>
 
-            {/* Operador Local Button */}
-            {!isSimpleMode && (
+            {/* Operador Local Button (Solo en Consola Avanzada para Operador Maestro) */}
+            {isOperatorAdmin && !isSimpleMode && (
               <button
                 type="button"
                 onClick={() => {
@@ -2592,6 +2732,36 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                 </div>
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono font-bold group-hover:bg-emerald-500/30 transition-colors">
                   🟢 Perfil / Ajustes
+                </span>
+              </button>
+            )}
+
+            {/* BOTÓN DE ACCESO DE OPERADOR MAESTRO // MODO DISCRETO */}
+            {!isOperatorAdmin ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOperatorAuthModalOpen(true);
+                  setMasterPinError(null);
+                  setMasterPinInput("");
+                }}
+                className="flex items-center gap-1.5 bg-slate-900/80 hover:bg-slate-850 text-slate-400 hover:text-indigo-300 border border-slate-800 hover:border-indigo-500/40 rounded-lg py-1.5 px-2.5 text-xs font-mono transition-all cursor-pointer shadow-sm group"
+                title="Acceso de Operación de la Estación (Calibración técnica)"
+              >
+                <Lock className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-400" />
+                <span className="hidden sm:inline">Operador</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleLockMasterAdmin}
+                className="flex items-center gap-2 bg-indigo-950/90 hover:bg-indigo-900 text-indigo-200 border border-indigo-500/60 hover:border-indigo-400 rounded-lg py-1.5 px-3 text-xs font-mono font-bold shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all cursor-pointer group"
+                title="Haz clic para salir del Modo Operador y ver la interfaz exactamente como la ven los visitantes (100% realista)"
+              >
+                <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+                <span>👑 Operador Maestro</span>
+                <span className="text-[9px] bg-indigo-900 hover:bg-indigo-800 px-1.5 py-0.5 rounded text-indigo-300 border border-indigo-700 ml-0.5">
+                  Salir
                 </span>
               </button>
             )}
@@ -2652,7 +2822,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               addToast={addToast}
             />
           </div>
-        ) : isSimpleMode ? (
+        ) : (isSimpleMode || !isOperatorAdmin) ? (
           <SimpleOracleView
             presets={DIMENSION_PRESETS}
             activePresetId={activePresetId}
@@ -2674,9 +2844,40 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
             onClearTransmitResult={() => setTransmitResult(null)}
             isSpeakingSolemn={isSpeaking}
             onPlayVoice={(text: string, isSpanishAccent?: boolean, isNeutralWelcome?: boolean) =>
-              speakSolemnMaleVoice(text, isSpanishAccent, isNeutralWelcome ?? true)
+              speakSolemnMaleVoice(text, isSpanishAccent, isNeutralWelcome ?? false)
             }
             onStopVoice={stopAllSpeech}
+            isOperatorAdmin={isOperatorAdmin}
+            forceBaritonePitch={forceBaritonePitch}
+            onToggleForceBaritonePitch={() => {
+              const next = !forceBaritonePitch;
+              setForceBaritonePitch(next);
+              setForceLowPitch(next);
+              localStorage.setItem("antena_force_baritone", String(next));
+              if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+            }}
+            baritonePitchValue={baritonePitchValue}
+            onChangeBaritonePitch={(val: number) => {
+              setBaritonePitchValue(val);
+              setCustomPitchValue(val);
+              setBaritonePreset("custom");
+              localStorage.setItem("antena_baritone_pitch", String(val));
+              if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+            }}
+            baritonePreset={baritonePreset}
+            onSelectBaritonePreset={(p: "pleiades" | "sirius" | "ancient" | "custom") => {
+              setBaritonePreset(p);
+              let val = 0.22;
+              if (p === "pleiades") val = 0.24;
+              else if (p === "sirius") val = 0.18;
+              else if (p === "ancient") val = 0.20;
+              setBaritonePitchValue(val);
+              setCustomPitchValue(val);
+              localStorage.setItem("antena_baritone_pitch", String(val));
+              localStorage.setItem("antena_baritone_preset", p);
+              if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+            }}
+            onTestBaritoneVoice={testBaritoneVoice}
             isRecording={isRecording}
             onStartVoiceRecording={startVoiceModulation}
             onStopVoiceRecording={() => stopVoiceModulation(false)}
@@ -3576,62 +3777,138 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                 </div>
               )}
 
-              {/* Control de Tono y Modulación Forzada */}
-              <div className="space-y-2 pt-2 border-t border-slate-900/60">
+              {/* Control de Tono y Modulación Forzada Barítona (Pléyades y Sirio) */}
+              <div className="space-y-2.5 pt-2 border-t border-slate-900/60">
                 <div className="flex justify-between items-center">
                   <label className="text-[9px] font-mono text-slate-400 uppercase tracking-wider block">
-                    Modulación Forzada de Tono (Pitch Shift)
+                    Modulación Barítona Profunda (Pléyades & Sirio)
                   </label>
                   <button
                     type="button"
                     onClick={() => {
-                      setForceLowPitch(!forceLowPitch);
+                      const next = !forceBaritonePitch;
+                      setForceBaritonePitch(next);
+                      setForceLowPitch(next);
+                      localStorage.setItem("antena_force_baritone", String(next));
                       if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
                     }}
                     className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase transition-all cursor-pointer border ${
-                      forceLowPitch
+                      forceBaritonePitch
                         ? "bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.2)]"
                         : "bg-slate-900 text-slate-500 border-slate-800"
                     }`}
                   >
-                    {forceLowPitch ? "⚡ GRAVE MASCULINO FORZADO" : "⚪ PITCH NATURAL"}
+                    {forceBaritonePitch ? "⚡ BARÍTONO PROFUNDO FORZADO" : "⚪ PITCH ESTÁNDAR"}
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-[9px] font-mono text-slate-500">Ultra-Grave</span>
+                <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForceBaritonePitch(true);
+                      setForceLowPitch(true);
+                      setBaritonePreset("pleiades");
+                      setBaritonePitchValue(0.24);
+                      setCustomPitchValue(0.24);
+                      localStorage.setItem("antena_baritone_pitch", "0.24");
+                      localStorage.setItem("antena_baritone_preset", "pleiades");
+                    }}
+                    className={`px-2 py-1 rounded text-[8px] font-mono font-bold border transition-all cursor-pointer ${
+                      baritonePreset === "pleiades" && forceBaritonePitch
+                        ? "bg-indigo-500/30 text-indigo-200 border-indigo-500/60 shadow-sm"
+                        : "bg-slate-900/80 text-slate-400 border-slate-800 hover:bg-slate-850"
+                    }`}
+                  >
+                    🌌 Pléyades (0.24x)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForceBaritonePitch(true);
+                      setForceLowPitch(true);
+                      setBaritonePreset("sirius");
+                      setBaritonePitchValue(0.18);
+                      setCustomPitchValue(0.18);
+                      localStorage.setItem("antena_baritone_pitch", "0.18");
+                      localStorage.setItem("antena_baritone_preset", "sirius");
+                    }}
+                    className={`px-2 py-1 rounded text-[8px] font-mono font-bold border transition-all cursor-pointer ${
+                      baritonePreset === "sirius" && forceBaritonePitch
+                        ? "bg-cyan-500/30 text-cyan-200 border-cyan-500/60 shadow-sm"
+                        : "bg-slate-900/80 text-slate-400 border-slate-800 hover:bg-slate-850"
+                    }`}
+                  >
+                    🌊 Sirio (0.18x)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForceBaritonePitch(true);
+                      setForceLowPitch(true);
+                      setBaritonePreset("ancient");
+                      setBaritonePitchValue(0.20);
+                      setCustomPitchValue(0.20);
+                      localStorage.setItem("antena_baritone_pitch", "0.20");
+                      localStorage.setItem("antena_baritone_preset", "ancient");
+                    }}
+                    className={`px-2 py-1 rounded text-[8px] font-mono font-bold border transition-all cursor-pointer ${
+                      baritonePreset === "ancient" && forceBaritonePitch
+                        ? "bg-amber-500/30 text-amber-200 border-amber-500/60 shadow-sm"
+                        : "bg-slate-900/80 text-slate-400 border-slate-800 hover:bg-slate-850"
+                    }`}
+                  >
+                    👑 Orión (0.20x)
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 pt-0.5">
+                  <span className="text-[9px] font-mono text-slate-500">Ultra-Barítono</span>
                   <input
                     type="range"
                     min="0.15"
-                    max="0.85"
-                    step="0.05"
-                    value={customPitchValue}
+                    max="0.45"
+                    step="0.01"
+                    value={baritonePitchValue}
                     onChange={(e) => {
-                      setCustomPitchValue(parseFloat(e.target.value));
+                      const val = parseFloat(e.target.value);
+                      setBaritonePitchValue(val);
+                      setCustomPitchValue(val);
+                      setBaritonePreset("custom");
+                      localStorage.setItem("antena_baritone_pitch", String(val));
                       if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
                     }}
                     className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-slate-900 rounded-lg"
                   />
-                  <span className="text-[9px] font-mono text-slate-500">Agudo</span>
-                  <span className="text-[9px] font-mono text-indigo-300 font-bold w-8 text-right">
-                    {customPitchValue.toFixed(2)}
+                  <span className="text-[9px] font-mono text-slate-500">Grave</span>
+                  <span className="text-[9px] font-mono text-indigo-300 font-bold w-10 text-right">
+                    {baritonePitchValue.toFixed(2)}x
                   </span>
                 </div>
                 <p className="text-[8px] text-slate-500 leading-normal">
-                  {forceLowPitch
-                    ? "Baja activamente la frecuencia de cualquier voz (femenina, castellana o neutra) para convertirla obligatoriamente en un tono barítono masculino profundo."
+                  {forceBaritonePitch
+                    ? "Baja activamente la frecuencia de oscilación a registros barítonos ultra-profundos para imitar los mensajes de civilizaciones antiguas de las Pléyades y Sirio."
                     : "Aplica la tonalidad predeterminada según la voz seleccionada."}
                 </p>
               </div>
 
-              {/* Botón de prueba de modulación */}
-              <button
-                type="button"
-                onClick={testSpeechSynthesis}
-                className="w-full flex items-center justify-center gap-1.5 bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-indigo-500/30 text-indigo-400 hover:text-indigo-300 text-[10px] font-mono py-2 rounded-lg transition-all cursor-pointer shadow-sm"
-              >
-                <span>🔊 Probar Modulación de Voz</span>
-              </button>
+              {/* Botones de prueba de modulación barítona */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => testBaritoneVoice("pleiades")}
+                  className="flex items-center justify-center gap-1.5 bg-slate-950 hover:bg-slate-900 border border-indigo-500/30 text-indigo-300 text-[10px] font-mono py-2 rounded-lg transition-all cursor-pointer shadow-sm"
+                >
+                  <span>🌌 Probar Pléyades</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => testBaritoneVoice("sirius")}
+                  className="flex items-center justify-center gap-1.5 bg-slate-950 hover:bg-slate-900 border border-cyan-500/30 text-cyan-300 text-[10px] font-mono py-2 rounded-lg transition-all cursor-pointer shadow-sm"
+                >
+                  <span>🌊 Probar Sirio</span>
+                </button>
+              </div>
             </div>
 
             {/* Módulo de Notificaciones Web (Alertas de Escritorio) */}
@@ -5335,6 +5612,19 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         operatorName={operatorName}
         addToast={addToast}
         onOpenAsTab={() => setActiveMainTab("blog")}
+      />
+
+      {/* MODAL DE AUTORIZACIÓN PARA OPERADOR MAESTRO (CALIBRACIÓN TÉCNICA) */}
+      <OperatorAuthModal
+        isOpen={isOperatorAuthModalOpen}
+        onClose={() => {
+          setIsOperatorAuthModalOpen(false);
+          setMasterPinError(null);
+        }}
+        onUnlock={handleUnlockMasterAdmin}
+        masterPinInput={masterPinInput}
+        setMasterPinInput={setMasterPinInput}
+        masterPinError={masterPinError}
       />
     </div>
   );

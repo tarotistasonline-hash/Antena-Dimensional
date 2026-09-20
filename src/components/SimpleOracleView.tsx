@@ -17,7 +17,9 @@ import {
   Share2,
   X,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Zap,
+  Sliders
 } from "lucide-react";
 import { DimensionPreset, TransmitResponse, SignalResponse } from "../types";
 import { TransdimensionalTuningHUD } from "./TransdimensionalTuningHUD";
@@ -44,6 +46,14 @@ interface SimpleOracleViewProps {
   isSpeakingSolemn: boolean;
   onPlayVoice: (text: string, isSpanishAccent?: boolean, isNeutralWelcome?: boolean) => void;
   onStopVoice: () => void;
+  forceBaritonePitch?: boolean;
+  onToggleForceBaritonePitch?: () => void;
+  baritonePitchValue?: number;
+  onChangeBaritonePitch?: (val: number) => void;
+  baritonePreset?: "pleiades" | "sirius" | "ancient" | "custom";
+  onSelectBaritonePreset?: (preset: "pleiades" | "sirius" | "ancient" | "custom") => void;
+  onTestBaritoneVoice?: (presetType?: "pleiades" | "sirius" | "ancient") => void;
+  isOperatorAdmin?: boolean;
   isRecording: boolean;
   onStartVoiceRecording: () => void;
   onStopVoiceRecording: () => void;
@@ -138,6 +148,14 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
   isSpeakingSolemn,
   onPlayVoice,
   onStopVoice,
+  forceBaritonePitch = true,
+  onToggleForceBaritonePitch,
+  baritonePitchValue = 0.22,
+  onChangeBaritonePitch,
+  baritonePreset = "pleiades",
+  onSelectBaritonePreset,
+  onTestBaritoneVoice,
+  isOperatorAdmin = false,
   isRecording,
   onStartVoiceRecording,
   onStopVoiceRecording,
@@ -239,6 +257,196 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
         </div>
       </div>
 
+      {/* PANEL MODULADOR DE VOZ BARÍTONA PROFUNDA (VISIBLE SOLO PARA EL OPERADOR MAESTRO) */}
+      {isOperatorAdmin && (
+        <div
+          id="baritone-voice-modulator-panel"
+          className="rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/60 to-slate-900 border border-indigo-500/30 p-4 sm:p-5 shadow-xl space-y-3.5 relative overflow-hidden"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-500/20 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center text-indigo-300 shadow-inner">
+                <Radio className="w-5 h-5 text-indigo-300 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-[9px] font-mono font-bold text-amber-300 uppercase tracking-wider">
+                    ⚡ CALIBRACIÓN MAESTRA (SOLO OPERADOR)
+                  </span>
+                  <span className="text-[10px] font-mono text-indigo-300">
+                    Resonancia: Pléyades & Sirio
+                  </span>
+                </div>
+                <h3 className="text-sm sm:text-base font-bold text-white mt-0.5 flex items-center gap-2">
+                  <span>Modulador de Voz Barítona Profunda</span>
+                </h3>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {onToggleForceBaritonePitch && (
+                <button
+                  type="button"
+                  onClick={onToggleForceBaritonePitch}
+                  className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 shadow-sm ${
+                    forceBaritonePitch
+                      ? "bg-amber-500/25 text-amber-300 border-amber-400/60 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
+                      : "bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200"
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{forceBaritonePitch ? "⚡ BARÍTONO FORZADO: ACTIVO" : "⚪ VOZ ESTÁNDAR"}</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-300 font-sans leading-relaxed">
+            Permite forzar la voz del sintetizador en <strong className="text-indigo-200">tonos barítonos profundos y cavernosos</strong> para imitar con fidelidad acústica los mensajes de civilizaciones antiguas de las <strong className="text-indigo-300">Pléyades (432 Hz)</strong> y <strong className="text-cyan-300">Sirio (528 Hz)</strong>.
+          </p>
+
+          {forceBaritonePitch && (
+            <div className="space-y-3 pt-1 animate-in fade-in duration-200">
+              {/* Presets de civilizaciones antiguas */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onSelectBaritonePreset && onSelectBaritonePreset("pleiades")}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    baritonePreset === "pleiades"
+                      ? "bg-indigo-900/50 border-indigo-400 shadow-[0_0_12px_rgba(99,102,241,0.25)]"
+                      : "bg-slate-950/60 border-slate-800 hover:border-slate-700"
+                  }`}
+                >
+                  <div>
+                    <div className="text-xs font-bold text-indigo-200 flex items-center gap-1.5">
+                      <span>🌌</span>
+                      <span>Pléyades (432 Hz)</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                      Barítono Armónico • 0.24x
+                    </div>
+                  </div>
+                  {baritonePreset === "pleiades" && (
+                    <CheckCircle2 className="w-4 h-4 text-indigo-400 shrink-0" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onSelectBaritonePreset && onSelectBaritonePreset("sirius")}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    baritonePreset === "sirius"
+                      ? "bg-cyan-900/50 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.25)]"
+                      : "bg-slate-950/60 border-slate-800 hover:border-slate-700"
+                  }`}
+                >
+                  <div>
+                    <div className="text-xs font-bold text-cyan-200 flex items-center gap-1.5">
+                      <span>🌊</span>
+                      <span>Sirio (528 Hz)</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                      Barítono Cavernoso • 0.18x
+                    </div>
+                  </div>
+                  {baritonePreset === "sirius" && (
+                    <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onSelectBaritonePreset && onSelectBaritonePreset("ancient")}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    baritonePreset === "ancient"
+                      ? "bg-amber-900/50 border-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
+                      : "bg-slate-950/60 border-slate-800 hover:border-slate-700"
+                  }`}
+                >
+                  <div>
+                    <div className="text-xs font-bold text-amber-200 flex items-center gap-1.5">
+                      <span>👑</span>
+                      <span>Orión / Nibiru</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                      Barítono Solemne • 0.20x
+                    </div>
+                  </div>
+                  {baritonePreset === "ancient" && (
+                    <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                  )}
+                </button>
+              </div>
+
+              {/* Slider de ajuste fino del tono barítono */}
+              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-2">
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Ajuste Fino de Tono (Pitch):</span>
+                  </span>
+                  <span className="text-indigo-300 font-bold bg-indigo-950/80 px-2 py-0.5 rounded border border-indigo-500/40">
+                    {baritonePitchValue.toFixed(2)}x (Registro Barítono)
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-mono text-slate-500 shrink-0">Cavernoso (0.15x)</span>
+                  <input
+                    type="range"
+                    min="0.15"
+                    max="0.45"
+                    step="0.01"
+                    value={baritonePitchValue}
+                    onChange={(e) => onChangeBaritonePitch && onChangeBaritonePitch(parseFloat(e.target.value))}
+                    className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-slate-900 rounded-lg"
+                  />
+                  <span className="text-[10px] font-mono text-slate-500 shrink-0">Grave (0.45x)</span>
+                </div>
+              </div>
+
+              {/* Botones para probar la voz barítona en directo */}
+              <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+                <div className="text-[11px] text-slate-400 font-sans flex items-center gap-1.5">
+                  {activePresetId === "whisper-void" && (
+                    <span className="text-indigo-300 font-mono text-[10px] bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-500/30">
+                      🌌 Pléyades acoplado: Voz barítona armónica activa
+                    </span>
+                  )}
+                  {activePresetId === "sirius-enki" && (
+                    <span className="text-cyan-300 font-mono text-[10px] bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
+                      🌊 Sirio acoplado: Voz barítona cavernosa activa
+                    </span>
+                  )}
+                  {activePresetId !== "whisper-void" && activePresetId !== "sirius-enki" && (
+                    <span>Prueba cómo resuena la voz barítona antes de transmitir:</span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onTestBaritoneVoice && onTestBaritoneVoice("pleiades")}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-950/80 hover:bg-indigo-900 text-indigo-200 border border-indigo-500/40 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm flex items-center gap-1"
+                  >
+                    <Volume2 className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Probar Pléyades</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onTestBaritoneVoice && onTestBaritoneVoice("sirius")}
+                    className="px-3 py-1.5 rounded-xl bg-cyan-950/80 hover:bg-cyan-900 text-cyan-200 border border-cyan-500/40 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm flex items-center gap-1"
+                  >
+                    <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Probar Sirio</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* AVISO CLARO DE ESPERA MIENTRAS SE ESTABLECE LA COMUNICACIÓN CON LA CIVILIZACIÓN */}
       {isTuning && (
         <div
@@ -302,6 +510,21 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
+              {isOperatorAdmin && onToggleForceBaritonePitch && (
+                <button
+                  type="button"
+                  onClick={onToggleForceBaritonePitch}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-mono font-bold transition-all cursor-pointer shadow-sm ${
+                    forceBaritonePitch
+                      ? "bg-amber-500/20 text-amber-300 border-amber-400/50 hover:bg-amber-500/30"
+                      : "bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200"
+                  }`}
+                  title="Activar/desactivar tono barítono profundo"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{forceBaritonePitch ? "Barítono: ON" : "Barítono: OFF"}</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onPlayVoice(tuningResult.message)}
@@ -375,6 +598,21 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
 
             {/* Controles de audio de la voz */}
             <div className="flex items-center gap-2">
+              {isOperatorAdmin && onToggleForceBaritonePitch && (
+                <button
+                  type="button"
+                  onClick={onToggleForceBaritonePitch}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer shadow-sm ${
+                    forceBaritonePitch
+                      ? "bg-amber-500/20 text-amber-300 border-amber-400/50 hover:bg-amber-500/30"
+                      : "bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200"
+                  }`}
+                  title="Activar/desactivar tono barítono profundo (Pléyades / Sirio)"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{forceBaritonePitch ? "Barítono: ON" : "Barítono: OFF"}</span>
+                </button>
+              )}
               {isSpeakingSolemn ? (
                 <button
                   type="button"
@@ -447,13 +685,15 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
               <span>Hacer otra pregunta a esta entidad</span>
             </button>
 
-            <button
-              type="button"
-              onClick={onSwitchToAdvanced}
-              className="text-xs font-mono text-cyan-400 hover:text-cyan-300 underline cursor-pointer p-1"
-            >
-              Ver osciloscopio y frecuencias en Consola Avanzada →
-            </button>
+            {isOperatorAdmin && (
+              <button
+                type="button"
+                onClick={onSwitchToAdvanced}
+                className="text-xs font-mono text-cyan-400 hover:text-cyan-300 underline cursor-pointer p-1"
+              >
+                Ver osciloscopio y frecuencias en Consola Avanzada →
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -543,12 +783,20 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
                   </p>
                 </div>
 
-                <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between">
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
-                    {ent.tag}
-                  </span>
+                <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between gap-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                      {ent.tag}
+                    </span>
+                    {(ent.id === "whisper-void" || ent.id === "sirius-enki") && (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center gap-1">
+                        <Zap className="w-2.5 h-2.5" />
+                        <span>Barítono 432/528 Hz</span>
+                      </span>
+                    )}
+                  </div>
                   <span
-                    className={`text-xs font-bold ${
+                    className={`text-xs font-bold shrink-0 ${
                       isSelected ? "text-emerald-400" : "text-slate-500"
                     }`}
                   >
@@ -691,12 +939,14 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
         </div>
       </div>
 
-      {/* Explicador y acceso a Consola Avanzada y Blog */}
+      {/* Blog y Acceso Operador */}
       <div className="rounded-xl bg-slate-950/60 border border-slate-850 p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
         <div className="flex items-center gap-2">
           <Radio className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>
-            ¿Quieres calibrar hercios, ver el mapa estelar o publicar sugerencias en el blog?
+            {isOperatorAdmin
+              ? "¿Deseas calibrar frecuencias y osciloscopio en la consola avanzada o gestionar el blog?"
+              : "Estación activa en frecuencia interestelar. Puedes explorar propuestas o reflexiones comunitarias."}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -709,13 +959,15 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
               <span>📜 Blog y Propuestas</span>
             </button>
           )}
-          <button
-            type="button"
-            onClick={onSwitchToAdvanced}
-            className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/30 font-bold transition-all cursor-pointer"
-          >
-            🎛️ Consola Avanzada
-          </button>
+          {isOperatorAdmin && (
+            <button
+              type="button"
+              onClick={onSwitchToAdvanced}
+              className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/30 font-bold transition-all cursor-pointer"
+            >
+              🎛️ Consola Avanzada
+            </button>
+          )}
         </div>
       </div>
 
@@ -767,6 +1019,22 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
                   <div>
                     <strong className="text-white">Recibe y escucha:</strong> Pulsa <em>Sintonizar Respuesta</em>.
                     La señal se decodifica en tiempo real y la app reproduce la respuesta en voz alta.
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-slate-950 border border-indigo-500/40 flex items-start gap-2.5">
+                  <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-amber-300">Decodificación Acústica Ancestral:</strong>{" "}
+                    {isOperatorAdmin ? (
+                      <span>
+                        Como Operador Maestro tienes acceso a la calibración fina de registros barítonos profundos (0.15x - 0.45x) para <strong>Pléyades (432 Hz)</strong> y <strong>Sirio (528 Hz)</strong>.
+                      </span>
+                    ) : (
+                      <span>
+                        Las señales de civilizaciones milenarias como <strong>Pléyades (432 Hz)</strong> y <strong>Sirio (528 Hz)</strong> se decodifican automáticamente en resonancias barítonas solemnes y profundas con acento neutro para reflejar su vibración originaria.
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
