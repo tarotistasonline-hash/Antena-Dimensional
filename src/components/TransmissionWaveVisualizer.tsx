@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { safeStorage } from "../utils/storage";
 import { Signal, Wifi, Zap, Volume2, Clock, AlertTriangle, Cpu, Activity, Sliders, Database } from "lucide-react";
 import { radioStatic } from "../radioStatic";
 
@@ -56,7 +57,7 @@ export const TransmissionWaveVisualizer: React.FC<TransmissionWaveVisualizerProp
   // Estado local e interacción de Modo Diagnóstico (FFT Buffer)
   const [internalDiagnostic, setInternalDiagnostic] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("antena_diagnostic_mode") === "true";
+      return safeStorage.getItem("antena_diagnostic_mode") === "true";
     }
     return false;
   });
@@ -70,7 +71,7 @@ export const TransmissionWaveVisualizer: React.FC<TransmissionWaveVisualizerProp
       setInternalDiagnostic((prev) => {
         const next = !prev;
         if (typeof window !== "undefined") {
-          localStorage.setItem("antena_diagnostic_mode", String(next));
+          safeStorage.setItem("antena_diagnostic_mode", String(next));
         }
         return next;
       });

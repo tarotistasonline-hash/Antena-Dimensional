@@ -169,7 +169,7 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
 });
 
-// --- BLOG DE SUGERENCIAS & IDEAS DATA STORE ---
+// --- LIBRO DE VISITAS DEL SITIO WEB ---
 const SUGGESTIONS_FILE = path.join(process.cwd(), "suggestions-data.json");
 
 interface SuggestionComment {
@@ -179,136 +179,151 @@ interface SuggestionComment {
   timestamp: string;
 }
 
-interface Suggestion {
+interface GuestbookEntry {
   id: string;
   title: string;
   author: string;
-  category: string;
+  location?: string;
+  recommend?: string;
+  rating?: number;
+  category?: string;
   content: string;
   votes: number;
   votedBy: string[];
-  status: "En Evaluación" | "En Desarrollo" | "Implementado" | "Completado";
   comments: SuggestionComment[];
   createdAt: string;
 }
 
-function getSuggestions(): Suggestion[] {
+function getSuggestions(): GuestbookEntry[] {
   try {
     if (fs.existsSync(SUGGESTIONS_FILE)) {
       const data = fs.readFileSync(SUGGESTIONS_FILE, "utf-8");
       return JSON.parse(data);
     }
   } catch (e) {
-    console.error("Error reading suggestions file", e);
+    console.error("Error reading guestbook file", e);
   }
-  const initial: Suggestion[] = [
+  const initial: GuestbookEntry[] = [
     {
-      id: "sug_1",
-      title: "Canal de Sintonización Arcturiana en 963 Hz (Frecuencia Dios)",
-      author: "Operador Vega-9",
-      category: "Frecuencias",
-      content: "Propongo integrar un canal predeterminado de resonancia armónica en 963 Hz para conectar directamente con inteligencias de Arcturus y procesar transmisiones telepáticas cristalinas.",
-      votes: 38,
+      id: "vis_1",
+      title: "Excelente sitio web, felicitaciones",
+      author: "Laura M.",
+      location: "Madrid, España",
+      recommend: "Sí, lo recomiendo",
+      rating: 5,
+      content: "Llegué a la página por recomendación de un amigo y me quedé fascinada. La ambientación espacial, la música y las respuestas de las entidades transmiten muchísima paz. Felicitaciones por crear un sitio tan original y bien logrado.",
+      votes: 24,
       votedBy: [],
-      status: "Implementado",
-      createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+      createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
       comments: [
         {
           id: "c_1",
-          author: "Comandante Orion",
-          content: "¡Excelente propuesta! La frecuencia de 963 Hz ya está activa en los presets de la Antena.",
-          timestamp: new Date(Date.now() - 86400000 * 2).toISOString()
+          author: "Lucas",
+          content: "Totalmente, a mí también me sorprendió lo bien armado que está todo.",
+          timestamp: new Date(Date.now() - 86400000 * 1.5).toISOString()
         }
       ]
     },
     {
-      id: "sug_2",
-      title: "Filtro de Reducción de Ruido Cósmico y Modo Transmisión Nocturna",
-      author: "Viajera Andromeda",
-      category: "Interfaz",
-      content: "Sería increíble contar con un modo de bajo consumo visual y sonoro para realizar sesiones de contacto interdimensional durante la madrugada sin fatiga ocular ni auditiva.",
-      votes: 27,
+      id: "vis_2",
+      title: "Muy linda experiencia para meditar",
+      author: "Martín Silva",
+      location: "Buenos Aires, Argentina",
+      recommend: "Sí, lo recomiendo",
+      rating: 5,
+      content: "Me encantó el sitio. Es súper intuitivo de usar y te atrapa desde el primer segundo. La atmósfera que genera es perfecta para desconectar un rato y reflexionar. Ya lo guardé en favoritos.",
+      votes: 19,
       votedBy: [],
-      status: "Implementado",
-      createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-      comments: [
-        {
-          id: "c_2",
-          author: "Sistema Antena",
-          content: "Se implementó el 'Modo Ahorro Batería (10 FPS)' y la Modulación de Tono Ultra-Grave.",
-          timestamp: new Date(Date.now() - 86400000 * 4).toISOString()
-        }
-      ]
-    },
-    {
-      id: "sug_3",
-      title: "Generador de Síntesis de Habla Alienígena por Modulación de Pitch",
-      author: "Operador Kassandra",
-      category: "Entidades ET",
-      content: "Permitir forzar la voz del sintetizador en tonos barítonos profundos para imitar mensajes de civilizaciones antiguas de las Pleyades y Sirio.",
-      votes: 42,
-      votedBy: [],
-      status: "Implementado",
-      createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+      createdAt: new Date(Date.now() - 86400000 * 1.5).toISOString(),
       comments: []
     },
     {
-      id: "sug_4",
-      title: "Registro de Bitácora Estelar Exportable en formato JSON o Texto",
-      author: "Investigador Polaris",
-      category: "Hardware",
-      content: "Exportación directa de los registros de mensajes captados en la Antena para guardarlos localmente o compartirlos con otros investigadores UAP.",
-      votes: 19,
+      id: "vis_3",
+      title: "Una página muy original y atrapante",
+      author: "Claudia R.",
+      location: "Santiago, Chile",
+      recommend: "Sí, lo recomiendo",
+      rating: 5,
+      content: "La verdad me sorprendió mucho. No conocía este concepto y está impecable. Funciona muy fluido en el teléfono móvil y los mensajes son muy profundos y positivos. Muy recomendable.",
+      votes: 16,
       votedBy: [],
-      status: "En Desarrollo",
       createdAt: new Date(Date.now() - 86400000 * 1).toISOString(),
+      comments: []
+    },
+    {
+      id: "vis_4",
+      title: "Hermosa web, me dejó pensando",
+      author: "Federico G.",
+      location: "Montevideo, Uruguay",
+      recommend: "Sí, lo recomiendo",
+      rating: 5,
+      content: "Hice una pregunta sincera sobre una decisión laboral y la respuesta me pareció muy sabia y acertada. Me gustó mucho el respeto con el que está tratado el tema.",
+      votes: 14,
+      votedBy: [],
+      createdAt: new Date(Date.now() - 86400000 * 0.5).toISOString(),
+      comments: []
+    },
+    {
+      id: "vis_5",
+      title: "Excelente trabajo, muy bien diseñado",
+      author: "Andrés P.",
+      location: "Bogotá, Colombia",
+      recommend: "Sí, lo recomiendo",
+      rating: 5,
+      content: "Gran página web. Se nota el cariño puesto en cada detalle visual y auditivo. La compartí en mi grupo de amigos interesados en estos temas y a todos les gustó.",
+      votes: 12,
+      votedBy: [],
+      createdAt: new Date().toISOString(),
       comments: []
     }
   ];
   try {
     fs.writeFileSync(SUGGESTIONS_FILE, JSON.stringify(initial, null, 2), "utf-8");
   } catch (e) {
-    console.error("Error writing initial suggestions file", e);
+    console.error("Error writing initial guestbook file", e);
   }
   return initial;
 }
 
-function saveSuggestions(suggestions: Suggestion[]) {
+function saveSuggestions(suggestions: GuestbookEntry[]) {
   try {
     fs.writeFileSync(SUGGESTIONS_FILE, JSON.stringify(suggestions, null, 2), "utf-8");
   } catch (e) {
-    console.error("Error writing suggestions file", e);
+    console.error("Error writing guestbook file", e);
   }
 }
 
-app.get("/api/suggestions", (req, res) => {
-  res.json({ suggestions: getSuggestions() });
+app.get(["/api/guestbook", "/api/opinions", "/api/suggestions"], (req, res) => {
+  const items = getSuggestions();
+  res.json({ guestbook: items, opinions: items, suggestions: items });
 });
 
-app.post("/api/suggestions", (req, res) => {
-  const { title, author, category, content } = req.body;
-  if (!title || !content) {
-    return res.status(400).json({ error: "Título y contenido requeridos" });
+app.post(["/api/guestbook", "/api/opinions", "/api/suggestions"], (req, res) => {
+  const { title, author, location, rating, recommend, content } = req.body;
+  if (!content || !String(content).trim()) {
+    return res.status(400).json({ error: "El mensaje es requerido para firmar el libro de visitas" });
   }
   const suggestions = getSuggestions();
-  const newSug: Suggestion = {
-    id: "sug_" + Math.random().toString(36).substring(2, 9) + Date.now().toString(36),
-    title: String(title).trim(),
-    author: author && String(author).trim() ? String(author).trim() : "Operador Anónimo",
-    category: category && String(category).trim() ? String(category).trim() : "General",
+  const rawTitle = title && String(title).trim() ? String(title).trim() : "Firma en el libro de visitas";
+  const newEntry: GuestbookEntry = {
+    id: "vis_" + Math.random().toString(36).substring(2, 9) + Date.now().toString(36),
+    title: rawTitle,
+    author: author && String(author).trim() ? String(author).trim() : "Visitante",
+    location: location && String(location).trim() ? String(location).trim() : "Visitante Web",
+    recommend: recommend && String(recommend).trim() ? String(recommend).trim() : "Sí, lo recomiendo",
+    rating: typeof rating === "number" ? rating : 5,
     content: String(content).trim(),
     votes: 1,
     votedBy: [],
-    status: "En Evaluación",
     comments: [],
     createdAt: new Date().toISOString()
   };
-  suggestions.unshift(newSug);
+  suggestions.unshift(newEntry);
   saveSuggestions(suggestions);
-  res.json({ success: true, suggestion: newSug });
+  res.json({ success: true, entry: newEntry, opinion: newEntry, suggestion: newEntry });
 });
 
-app.post("/api/suggestions/:id/vote", (req, res) => {
+app.post(["/api/guestbook/:id/vote", "/api/suggestions/:id/vote", "/api/opinions/:id/vote"], (req, res) => {
   const { id } = req.params;
   const { voterId } = req.body;
   const suggestions = getSuggestions();
@@ -335,7 +350,7 @@ app.post("/api/suggestions/:id/vote", (req, res) => {
   res.json({ success: true, votes: item.votes, hasVoted: !alreadyVoted });
 });
 
-app.post("/api/suggestions/:id/comment", (req, res) => {
+app.post(["/api/suggestions/:id/comment", "/api/opinions/:id/comment"], (req, res) => {
   const { id } = req.params;
   const { author, content } = req.body;
   if (!content || !String(content).trim()) {
@@ -344,13 +359,13 @@ app.post("/api/suggestions/:id/comment", (req, res) => {
   const suggestions = getSuggestions();
   const item = suggestions.find((s) => s.id === id);
   if (!item) {
-    return res.status(404).json({ error: "Sugerencia no encontrada" });
+    return res.status(404).json({ error: "Opinión no encontrada" });
   }
 
   if (!item.comments) item.comments = [];
   const newComment: SuggestionComment = {
     id: "c_" + Math.random().toString(36).substring(2, 9),
-    author: author && String(author).trim() ? String(author).trim() : "Operador Local",
+    author: author && String(author).trim() ? String(author).trim() : "Visitante",
     content: String(content).trim(),
     timestamp: new Date().toISOString()
   };

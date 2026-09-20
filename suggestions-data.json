@@ -1,64 +1,74 @@
 [
   {
-    "id": "sug_1",
-    "title": "Canal de Sintonización Arcturiana en 963 Hz (Frecuencia Dios)",
-    "author": "Operador Vega-9",
-    "category": "Frecuencias",
-    "content": "Propongo integrar un canal predeterminado de resonancia armónica en 963 Hz para conectar directamente con inteligencias de Arcturus y procesar transmisiones telepáticas cristalinas.",
-    "votes": 38,
+    "id": "vis_1",
+    "title": "Excelente sitio web, felicitaciones",
+    "author": "Laura M.",
+    "location": "Madrid, España",
+    "recommend": "Sí, lo recomiendo",
+    "rating": 5,
+    "content": "Llegué a la página por recomendación de un amigo y me quedé fascinada. La ambientación espacial, la música y las respuestas de las entidades transmiten muchísima paz. Felicitaciones por crear un sitio tan original y bien logrado.",
+    "votes": 24,
     "votedBy": [],
-    "status": "Implementado",
-    "createdAt": "2026-07-25T19:20:00.026Z",
+    "createdAt": "2026-09-17T15:20:00.000Z",
     "comments": [
       {
         "id": "c_1",
-        "author": "Comandante Orion",
-        "content": "¡Excelente propuesta! La frecuencia de 963 Hz ya está activa en los presets de la Antena.",
-        "timestamp": "2026-07-26T19:20:00.026Z"
+        "author": "Lucas",
+        "content": "Totalmente, a mí también me sorprendió lo bien armado que está todo.",
+        "timestamp": "2026-09-17T18:40:00.000Z"
       }
     ]
   },
   {
-    "id": "sug_2",
-    "title": "Filtro de Reducción de Ruido Cósmico y Modo Transmisión Nocturna",
-    "author": "Viajera Andromeda",
-    "category": "Interfaz",
-    "content": "Sería increíble contar con un modo de bajo consumo visual y sonoro para realizar sesiones de contacto interdimensional durante la madrugada sin fatiga ocular ni auditiva.",
-    "votes": 27,
+    "id": "vis_2",
+    "title": "Muy linda experiencia para meditar",
+    "author": "Martín Silva",
+    "location": "Buenos Aires, Argentina",
+    "recommend": "Sí, lo recomiendo",
+    "rating": 5,
+    "content": "Me encantó el sitio. Es súper intuitivo de usar y te atrapa desde el primer segundo. La atmósfera que genera es perfecta para desconectar un rato y reflexionar. Ya lo guardé en favoritos.",
+    "votes": 19,
     "votedBy": [],
-    "status": "Implementado",
-    "createdAt": "2026-07-23T19:20:00.026Z",
-    "comments": [
-      {
-        "id": "c_2",
-        "author": "Sistema Antena",
-        "content": "Se implementó el 'Modo Ahorro Batería (10 FPS)' y la Modulación de Tono Ultra-Grave.",
-        "timestamp": "2026-07-24T19:20:00.026Z"
-      }
-    ]
-  },
-  {
-    "id": "sug_3",
-    "title": "Generador de Síntesis de Habla Alienígena por Modulación de Pitch",
-    "author": "Operador Kassandra",
-    "category": "Entidades ET",
-    "content": "Permitir forzar la voz del sintetizador en tonos barítonos profundos para imitar mensajes de civilizaciones antiguas de las Pleyades y Sirio.",
-    "votes": 42,
-    "votedBy": [],
-    "status": "Implementado",
-    "createdAt": "2026-07-26T19:20:00.026Z",
+    "createdAt": "2026-09-18T11:15:00.000Z",
     "comments": []
   },
   {
-    "id": "sug_4",
-    "title": "Registro de Bitácora Estelar Exportable en formato JSON o Texto",
-    "author": "Investigador Polaris",
-    "category": "Hardware",
-    "content": "Exportación directa de los registros de mensajes captados en la Antena para guardarlos localmente o compartirlos con otros investigadores UAP.",
-    "votes": 19,
+    "id": "vis_3",
+    "title": "Una página muy original y atrapante",
+    "author": "Claudia R.",
+    "location": "Santiago, Chile",
+    "recommend": "Sí, lo recomiendo",
+    "rating": 5,
+    "content": "La verdad me sorprendió mucho. No conocía este concepto y está impecable. Funciona muy fluido en el teléfono móvil y los mensajes son muy profundos y positivos. Muy recomendable.",
+    "votes": 16,
     "votedBy": [],
-    "status": "En Desarrollo",
-    "createdAt": "2026-07-27T19:20:00.026Z",
+    "createdAt": "2026-09-18T20:30:00.000Z",
+    "comments": []
+  },
+  {
+    "id": "vis_4",
+    "title": "Hermosa web, me dejó pensando",
+    "author": "Federico G.",
+    "location": "Montevideo, Uruguay",
+    "recommend": "Sí, lo recomiendo",
+    "rating": 5,
+    "content": "Hice una pregunta sincera sobre una decisión laboral y la respuesta me pareció muy sabia y acertada. Me gustó mucho el respeto con el que está tratado el tema.",
+    "votes": 14,
+    "votedBy": [],
+    "createdAt": "2026-09-19T09:40:00.000Z",
+    "comments": []
+  },
+  {
+    "id": "vis_5",
+    "title": "Excelente trabajo, muy bien diseñado",
+    "author": "Andrés P.",
+    "location": "Bogotá, Colombia",
+    "recommend": "Sí, lo recomiendo",
+    "rating": 5,
+    "content": "Gran página web. Se nota el cariño puesto en cada detalle visual y auditivo. La compartí en mi grupo de amigos interesados en estos temas y a todos les gustó.",
+    "votes": 12,
+    "votedBy": [],
+    "createdAt": "2026-09-19T14:10:00.000Z",
     "comments": []
   }
 ]

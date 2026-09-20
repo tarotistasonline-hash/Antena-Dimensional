@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   X,
-  Lightbulb,
+  BookOpen,
   Maximize2,
   Minimize2,
   ExternalLink,
@@ -49,14 +49,14 @@ export const SuggestionsBlogModal: React.FC<SuggestionsBlogModalProps> = ({
         <div className="p-3 sm:p-4 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.25)] shrink-0">
-              <Lightbulb className="w-5 h-5 animate-pulse" />
+              <BookOpen className="w-5 h-5 text-amber-400" />
             </div>
             <div className="truncate">
               <h2 className="text-xs sm:text-sm md:text-base font-mono font-bold text-amber-300 uppercase tracking-wider truncate flex items-center gap-2">
-                <span>📜 BLOG & IDEAS MULTIDIMENSIONALES</span>
+                <span>📖 LIBRO DE VISITAS</span>
               </h2>
               <p className="text-[10px] sm:text-[11px] text-slate-400 font-sans truncate">
-                Foro abierto para proponer y votar frecuencias, entidades ET y funciones.
+                Mensajes, saludos y opiniones de quienes han visitado nuestro sitio web.
               </p>
             </div>
           </div>
@@ -122,7 +122,7 @@ export const SuggestionsBlogModal: React.FC<SuggestionsBlogModalProps> = ({
         {/* Footer del Modal */}
         <div className="p-3 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between text-xs font-mono shrink-0">
           <span className="text-slate-500 text-[10px] truncate pr-2">
-            Red de Feedback Multidimensional • Sintonizador Antena
+            Libro de Visitas del Sitio Web • Opiniones reales de visitantes
           </span>
           <button
             type="button"

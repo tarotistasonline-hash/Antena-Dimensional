@@ -1,4 +1,5 @@
 import mixpanel from "mixpanel-browser";
+import { safeStorage } from "./utils/storage";
 
 let isInitialized = false;
 let currentToken = "";
@@ -9,10 +10,10 @@ let currentToken = "";
  */
 export const getDistinctId = (): string => {
   if (typeof window === "undefined") return "operador_servidor";
-  let id = localStorage.getItem("antena_mixpanel_distinct_id");
+  let id = safeStorage.getItem("antena_mixpanel_distinct_id");
   if (!id) {
     id = "op_" + Math.random().toString(36).substring(2, 10) + "_" + Date.now().toString(36);
-    localStorage.setItem("antena_mixpanel_distinct_id", id);
+    safeStorage.setItem("antena_mixpanel_distinct_id", id);
   }
   return id;
 };
@@ -20,11 +21,11 @@ export const getDistinctId = (): string => {
 export const DEFAULT_MIXPANEL_TOKEN = "a2abc4490ad62c9fb7713c881bb63b51";
 
 /**
- * Obtiene el Token activo de Mixpanel desde localStorage, variables de entorno o predeterminado
+ * Obtiene el Token activo de Mixpanel desde safeStorage, variables de entorno o predeterminado
  */
 export const getMixpanelToken = (): string => {
   if (typeof window === "undefined") return DEFAULT_MIXPANEL_TOKEN;
-  const stored = localStorage.getItem("mixpanel_project_token");
+  const stored = safeStorage.getItem("mixpanel_project_token");
   if (stored && stored.trim().length > 0) {
     return stored.trim();
   }
@@ -56,7 +57,7 @@ export const initMixpanel = (tokenOverride?: string): boolean => {
         .then((cfg) => {
           if (cfg && cfg.token && typeof cfg.token === "string" && cfg.token.trim()) {
             const cleanToken = cfg.token.trim();
-            localStorage.setItem("mixpanel_project_token", cleanToken);
+            safeStorage.setItem("mixpanel_project_token", cleanToken);
             initMixpanel(cleanToken);
           }
         })
@@ -70,7 +71,6 @@ export const initMixpanel = (tokenOverride?: string): boolean => {
     mixpanel.init(tokenToUse, {
       debug: false,
       track_pageview: true,
-      persistence: "localStorage",
       batch_requests: false,
       ignore_dnt: true,
     });
@@ -94,7 +94,7 @@ export const saveMixpanelToken = async (newToken: string): Promise<boolean> => {
   
   if (!cleanToken) {
     if (typeof window !== "undefined") {
-      localStorage.removeItem("mixpanel_project_token");
+      safeStorage.removeItem("mixpanel_project_token");
       try {
         await fetch("/api/mixpanel/config", {
           method: "POST",
@@ -118,7 +118,7 @@ export const saveMixpanelToken = async (newToken: string): Promise<boolean> => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: cleanToken }),
       });
-      localStorage.setItem("mixpanel_project_token", cleanToken);
+      safeStorage.setItem("mixpanel_project_token", cleanToken);
     } catch (err) {
       console.warn("Error al guardar token en servidor:", err);
     }
@@ -157,9 +157,9 @@ export const isOperatorExcluded = (): boolean => {
   } catch (e) {}
 
   return (
-    localStorage.getItem("antena_operator_excluded") === "true" ||
-    localStorage.getItem("antena_exclude_my_visits_v2") === "true" ||
-    localStorage.getItem("antena_exclude_my_visits") === "true"
+    safeStorage.getItem("antena_operator_excluded") === "true" ||
+    safeStorage.getItem("antena_exclude_my_visits_v2") === "true" ||
+    safeStorage.getItem("antena_exclude_my_visits") === "true"
   );
 };
 
@@ -168,9 +168,9 @@ export const isOperatorExcluded = (): boolean => {
  */
 export const setOperatorExcluded = (excluded: boolean): boolean => {
   if (typeof window === "undefined") return false;
-  localStorage.setItem("antena_operator_excluded", excluded ? "true" : "false");
-  localStorage.setItem("antena_exclude_my_visits_v2", excluded ? "true" : "false");
-  localStorage.setItem("antena_exclude_my_visits", excluded ? "true" : "false");
+  safeStorage.setItem("antena_operator_excluded", excluded ? "true" : "false");
+  safeStorage.setItem("antena_exclude_my_visits_v2", excluded ? "true" : "false");
+  safeStorage.setItem("antena_exclude_my_visits", excluded ? "true" : "false");
   return excluded;
 };
 

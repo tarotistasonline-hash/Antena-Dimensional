@@ -18,6 +18,7 @@ import {
   fetchServerVisits,
   incrementServerVisit,
 } from "../cloudCounter";
+import { safeStorage } from "../utils/storage";
 
 interface TelemetryModalProps {
   isOpen: boolean;
@@ -77,7 +78,7 @@ export const TelemetryModal: React.FC<TelemetryModalProps> = ({
 
   const handleClearLogs = () => {
     if (typeof window !== "undefined") {
-      localStorage.removeItem("antena_telemetry_events_log");
+      safeStorage.removeItem("antena_telemetry_events_log");
     }
     setLogs([]);
     addToast("REGISTRO LIMPIADO", "Se vació el historial local de eventos.", "high-intensity");

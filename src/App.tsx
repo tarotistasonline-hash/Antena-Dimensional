@@ -35,6 +35,8 @@ import {
   Maximize2,
   Minimize2,
   Lightbulb,
+  MessageSquare,
+  BookOpen,
   Clock,
   Square,
   Play,
@@ -78,6 +80,7 @@ import { SimpleOracleView } from "./components/SimpleOracleView";
 import { OperatorAuthModal } from "./components/OperatorAuthModal";
 import { TransdimensionalTuningHUD } from "./components/TransdimensionalTuningHUD";
 import { WELCOME_AUDIO_EXPLANATION } from "./components/WelcomeVoiceGuide";
+import { safeStorage } from "./utils/storage";
 
 interface QuantumToast {
   id: string;
@@ -94,10 +97,10 @@ export default function App() {
       try {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get("admin") === "1" || urlParams.get("admin") === "true") {
-          localStorage.setItem("antena_master_admin", "true");
+          safeStorage.setItem("antena_master_admin", "true");
           return true;
         }
-        return localStorage.getItem("antena_master_admin") === "true";
+        return safeStorage.getItem("antena_master_admin") === "true";
       } catch (e) {
         return false;
       }
@@ -111,7 +114,7 @@ export default function App() {
   // Modo de Interfaz: Simple (por defecto para principiantes y móvil) vs Consola Avanzada (solo para Operador Maestro)
   const [isSimpleMode, setIsSimpleMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("antena_ui_mode");
+      const saved = safeStorage.getItem("antena_ui_mode");
       if (saved === "advanced") return false;
       if (saved === "simple") return true;
     }
@@ -119,8 +122,8 @@ export default function App() {
   });
 
   // Operador Local State
-  const [operatorName, setOperatorName] = useState(() => localStorage.getItem("antena_operator_name") || "Operador-01");
-  const [operatorRank, setOperatorRank] = useState(() => localStorage.getItem("antena_operator_rank") || "Operador Transdimensional");
+  const [operatorName, setOperatorName] = useState(() => safeStorage.getItem("antena_operator_name") || "Operador-01");
+  const [operatorRank, setOperatorRank] = useState(() => safeStorage.getItem("antena_operator_rank") || "Operador Transdimensional");
   const [isOperatorModalOpen, setIsOperatorModalOpen] = useState(false);
   const [tempOperatorName, setTempOperatorName] = useState(operatorName);
   const [tempOperatorRank, setTempOperatorRank] = useState(operatorRank);
@@ -178,7 +181,7 @@ export default function App() {
   // Forzar tonos barítonos profundos (mensajes de civilizaciones antiguas de las Pléyades y Sirio)
   const [forceBaritonePitch, setForceBaritonePitch] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("antena_force_baritone");
+      const saved = safeStorage.getItem("antena_force_baritone");
       return saved !== null ? saved === "true" : true;
     }
     return true;
@@ -186,7 +189,7 @@ export default function App() {
   const [baritonePreset, setBaritonePreset] = useState<"pleiades" | "sirius" | "ancient" | "custom">("pleiades");
   const [baritonePitchValue, setBaritonePitchValue] = useState<number>(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("antena_baritone_pitch");
+      const saved = safeStorage.getItem("antena_baritone_pitch");
       return saved ? parseFloat(saved) : 0.22;
     }
     return 0.22;
@@ -200,7 +203,7 @@ export default function App() {
   const [visits, setVisits] = useState<number>(() => {
     if (typeof window !== "undefined") {
       try {
-        const cached = localStorage.getItem("antena_cached_visits");
+        const cached = safeStorage.getItem("antena_cached_visits");
         if (cached) {
           const val = parseInt(cached, 10);
           if (!isNaN(val) && val > 0) return Math.max(298, val);
@@ -217,7 +220,7 @@ export default function App() {
       const nextVal = Math.max(prev, newCount);
       if (typeof window !== "undefined") {
         try {
-          localStorage.setItem("antena_cached_visits", String(nextVal));
+          safeStorage.setItem("antena_cached_visits", String(nextVal));
         } catch (e) {}
       }
       return nextVal;
@@ -230,7 +233,7 @@ export default function App() {
     setVisits(cleanVal);
     if (typeof window !== "undefined") {
       try {
-        localStorage.setItem("antena_cached_visits", String(cleanVal));
+        safeStorage.setItem("antena_cached_visits", String(cleanVal));
       } catch (e) {}
     }
   }, []);
@@ -269,7 +272,7 @@ export default function App() {
   // Low Power Mode, Immersion Mode & Glitch Mode States
   const [isLowPowerMode, setIsLowPowerMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("antena_low_power_mode") === "true";
+      return safeStorage.getItem("antena_low_power_mode") === "true";
     }
     return false;
   });
@@ -279,7 +282,7 @@ export default function App() {
   // Modo Glitch (Aberración Cromática & Sintonización Inestable)
   const [isGlitchMode, setIsGlitchMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("antena_glitch_mode") === "true";
+      return safeStorage.getItem("antena_glitch_mode") === "true";
     }
     return false;
   });
@@ -288,7 +291,7 @@ export default function App() {
     setIsGlitchMode((prev) => {
       const next = !prev;
       if (typeof window !== "undefined") {
-        localStorage.setItem("antena_glitch_mode", String(next));
+        safeStorage.setItem("antena_glitch_mode", String(next));
       }
       return next;
     });
@@ -297,7 +300,7 @@ export default function App() {
   // Modo Diagnóstico (Superposición de Buffer FFT y Analizador de Audio)
   const [isDiagnosticMode, setIsDiagnosticMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("antena_diagnostic_mode") === "true";
+      return safeStorage.getItem("antena_diagnostic_mode") === "true";
     }
     return false;
   });
@@ -306,7 +309,7 @@ export default function App() {
     setIsDiagnosticMode((prev) => {
       const next = !prev;
       if (typeof window !== "undefined") {
-        localStorage.setItem("antena_diagnostic_mode", String(next));
+        safeStorage.setItem("antena_diagnostic_mode", String(next));
       }
       return next;
     });
@@ -316,7 +319,7 @@ export default function App() {
     setIsLowPowerMode((prev) => {
       const next = !prev;
       if (typeof window !== "undefined") {
-        localStorage.setItem("antena_low_power_mode", String(next));
+        safeStorage.setItem("antena_low_power_mode", String(next));
       }
       return next;
     });
@@ -1163,29 +1166,29 @@ export default function App() {
     }
     setForceBaritonePitch(true);
     setForceLowPitch(true);
-    localStorage.setItem("antena_force_baritone", "true");
+    safeStorage.setItem("antena_force_baritone", "true");
 
     let sample = "";
     if (presetType === "pleiades") {
       setBaritonePreset("pleiades");
       setBaritonePitchValue(0.24);
       setCustomPitchValue(0.24);
-      localStorage.setItem("antena_baritone_pitch", "0.24");
-      localStorage.setItem("antena_baritone_preset", "pleiades");
+      safeStorage.setItem("antena_baritone_pitch", "0.24");
+      safeStorage.setItem("antena_baritone_preset", "pleiades");
       sample = "Transmisión de los emisarios de las Pléyades. Frecuencia de 432 Hertz sintonizada. Les hablamos desde el despertar espiritual y la conciencia universal.";
     } else if (presetType === "sirius") {
       setBaritonePreset("sirius");
       setBaritonePitchValue(0.18);
       setCustomPitchValue(0.18);
-      localStorage.setItem("antena_baritone_pitch", "0.18");
-      localStorage.setItem("antena_baritone_preset", "sirius");
+      safeStorage.setItem("antena_baritone_pitch", "0.18");
+      safeStorage.setItem("antena_baritone_preset", "sirius");
       sample = "Emisión del Santuario de Sirio y Enki. Frecuencia de 528 Hertz acoplada. Custodios de la sabiduría ancestral y el origen de las aguas cósmicas.";
     } else {
       setBaritonePreset("ancient");
       setBaritonePitchValue(0.20);
       setCustomPitchValue(0.20);
-      localStorage.setItem("antena_baritone_pitch", "0.20");
-      localStorage.setItem("antena_baritone_preset", "ancient");
+      safeStorage.setItem("antena_baritone_pitch", "0.20");
+      safeStorage.setItem("antena_baritone_preset", "ancient");
       sample = "Sintonización barítona ancestral forzada. Mensaje de las civilizaciones antiguas de las Pléyades y Sirio. Frecuencia cuántica portadora estabilizada.";
     }
     speakSolemnMaleVoice(sample, false, false);
@@ -1535,7 +1538,7 @@ export default function App() {
     }
 
     // Cargar bitácora local
-    const savedLogs = localStorage.getItem("antena_dimensional_logs");
+    const savedLogs = safeStorage.getItem("antena_dimensional_logs");
     if (savedLogs) {
       try {
         setLogs(JSON.parse(savedLogs));
@@ -1919,7 +1922,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
       // Guardar localmente
       const updatedLogs = [newLog, ...logs];
       setLogs(updatedLogs);
-      localStorage.setItem("antena_dimensional_logs", JSON.stringify(updatedLogs));
+      safeStorage.setItem("antena_dimensional_logs", JSON.stringify(updatedLogs));
     } catch (err: any) {
       console.warn("Transmisión de red canalizada a acoplamiento escalar local:", err);
       const freqString = `${targetFreqVal} ${targetFreqUnit}`;
@@ -2189,7 +2192,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         // Guardar localmente
         setLogs((prev) => {
           const updated = [newLog, ...prev];
-          localStorage.setItem("antena_dimensional_logs", JSON.stringify(updated));
+          safeStorage.setItem("antena_dimensional_logs", JSON.stringify(updated));
           return updated;
         });
       }
@@ -2352,7 +2355,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
       // Guardar localmente
       const updatedLogs = [newLog, ...logs];
       setLogs(updatedLogs);
-      localStorage.setItem("antena_dimensional_logs", JSON.stringify(updatedLogs));
+      safeStorage.setItem("antena_dimensional_logs", JSON.stringify(updatedLogs));
       setTransmissionMessage(""); // limpiar caja
     } catch (err: any) {
       console.warn("Transmisión canalizada a eco de respuesta local:", err);
@@ -2380,7 +2383,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
 
   const handleClearLogs = () => {
     setLogs([]);
-    localStorage.removeItem("antena_dimensional_logs");
+    safeStorage.removeItem("antena_dimensional_logs");
   };
 
   // Reiniciar estado completo de la aplicación
@@ -2422,21 +2425,21 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
   const handleUpdateLogs = (updatedLogs: LogEntry[]) => {
     setLogs(updatedLogs);
     if (updatedLogs.length === 0) {
-      localStorage.removeItem("antena_dimensional_logs");
+      safeStorage.removeItem("antena_dimensional_logs");
     } else {
-      localStorage.setItem("antena_dimensional_logs", JSON.stringify(updatedLogs));
+      safeStorage.setItem("antena_dimensional_logs", JSON.stringify(updatedLogs));
     }
   };
 
   // Desbloquear Acceso Maestro / Administrador de Estación
   const handleUnlockMasterAdmin = () => {
     const entered = masterPinInput.trim();
-    const customPin = typeof window !== "undefined" ? localStorage.getItem("antena_custom_pin") : null;
+    const customPin = typeof window !== "undefined" ? safeStorage.getItem("antena_custom_pin") : null;
     const isValid = entered === "144" || entered === "7777" || (customPin && entered === customPin);
     if (isValid) {
       setIsOperatorAdmin(true);
       if (typeof window !== "undefined") {
-        localStorage.setItem("antena_master_admin", "true");
+        safeStorage.setItem("antena_master_admin", "true");
       }
       setIsOperatorAuthModalOpen(false);
       setMasterPinInput("");
@@ -2455,7 +2458,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
   const handleLockMasterAdmin = () => {
     setIsOperatorAdmin(false);
     if (typeof window !== "undefined") {
-      localStorage.removeItem("antena_master_admin");
+      safeStorage.removeItem("antena_master_admin");
     }
     setIsSimpleMode(true);
     addToast(
@@ -2506,7 +2509,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                   type="button"
                   onClick={() => {
                     setIsSimpleMode(true);
-                    localStorage.setItem("antena_ui_mode", "simple");
+                    safeStorage.setItem("antena_ui_mode", "simple");
                   }}
                   className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                     isSimpleMode
@@ -2522,7 +2525,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                   type="button"
                   onClick={() => {
                     setIsSimpleMode(false);
-                    localStorage.setItem("antena_ui_mode", "advanced");
+                    safeStorage.setItem("antena_ui_mode", "advanced");
                   }}
                   className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                     !isSimpleMode
@@ -2548,16 +2551,16 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
 
           {/* Estado, Visitas Reales, Bajo Consumo, Modo Inmersión e Identificación de Operador Local */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* BOTÓN BLOG DE SUGERENCIAS */}
+            {/* BOTÓN LIBRO DE VISITAS */}
             <button
               type="button"
               onClick={() => setIsSuggestionsModalOpen(true)}
               className="flex items-center gap-2 bg-gradient-to-r from-amber-950/90 via-yellow-950/80 to-amber-900/90 hover:from-amber-900 hover:to-amber-800 border border-amber-500/70 hover:border-amber-400 rounded-lg py-1.5 px-3 text-xs shadow-[0_0_15px_rgba(245,158,11,0.25)] transition-all duration-200 cursor-pointer group"
-              title="Abre el foro de la comunidad para proponer y votar ideas o nuevas frecuencias para la Antena"
+              title="Lee opiniones y saludos de visitantes o firma nuestro libro de visitas"
             >
-              <Lightbulb className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform animate-pulse" />
+              <BookOpen className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
               <span className="font-mono text-amber-200 font-bold text-[11px]">
-                📜 Blog
+                📖 Libro de Visitas
               </span>
             </button>
 
@@ -2797,14 +2800,14 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
             <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-amber-500/50 rounded-2xl p-4 sm:p-5 shadow-xl">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.25)]">
-                  <Lightbulb className="w-6 h-6 animate-pulse text-amber-400" />
+                  <BookOpen className="w-6 h-6 text-amber-400" />
                 </div>
                 <div>
                   <h2 className="text-sm sm:text-base md:text-lg font-bold font-mono text-amber-300 uppercase tracking-wide">
-                    BLOG & PROPUESTAS MULTIDIMENSIONALES
+                    LIBRO DE VISITAS
                   </h2>
                   <p className="text-xs text-slate-400 font-sans">
-                    Publica tus sugerencias, vota las mejores ideas y descubre aportes de la comunidad.
+                    Opiniones, saludos y experiencias compartidas por los visitantes de nuestro sitio web.
                   </p>
                 </div>
               </div>
@@ -2853,7 +2856,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               const next = !forceBaritonePitch;
               setForceBaritonePitch(next);
               setForceLowPitch(next);
-              localStorage.setItem("antena_force_baritone", String(next));
+              safeStorage.setItem("antena_force_baritone", String(next));
               if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
             }}
             baritonePitchValue={baritonePitchValue}
@@ -2861,7 +2864,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               setBaritonePitchValue(val);
               setCustomPitchValue(val);
               setBaritonePreset("custom");
-              localStorage.setItem("antena_baritone_pitch", String(val));
+              safeStorage.setItem("antena_baritone_pitch", String(val));
               if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
             }}
             baritonePreset={baritonePreset}
@@ -2873,8 +2876,8 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               else if (p === "ancient") val = 0.20;
               setBaritonePitchValue(val);
               setCustomPitchValue(val);
-              localStorage.setItem("antena_baritone_pitch", String(val));
-              localStorage.setItem("antena_baritone_preset", p);
+              safeStorage.setItem("antena_baritone_pitch", String(val));
+              safeStorage.setItem("antena_baritone_preset", p);
               if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
             }}
             onTestBaritoneVoice={testBaritoneVoice}
@@ -2883,7 +2886,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
             onStopVoiceRecording={() => stopVoiceModulation(false)}
             onSwitchToAdvanced={() => {
               setIsSimpleMode(false);
-              localStorage.setItem("antena_ui_mode", "advanced");
+              safeStorage.setItem("antena_ui_mode", "advanced");
             }}
             onOpenBlog={() => setActiveMainTab("blog")}
           />
@@ -3789,7 +3792,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                       const next = !forceBaritonePitch;
                       setForceBaritonePitch(next);
                       setForceLowPitch(next);
-                      localStorage.setItem("antena_force_baritone", String(next));
+                      safeStorage.setItem("antena_force_baritone", String(next));
                       if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
                     }}
                     className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase transition-all cursor-pointer border ${
@@ -3811,8 +3814,8 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                       setBaritonePreset("pleiades");
                       setBaritonePitchValue(0.24);
                       setCustomPitchValue(0.24);
-                      localStorage.setItem("antena_baritone_pitch", "0.24");
-                      localStorage.setItem("antena_baritone_preset", "pleiades");
+                      safeStorage.setItem("antena_baritone_pitch", "0.24");
+                      safeStorage.setItem("antena_baritone_preset", "pleiades");
                     }}
                     className={`px-2 py-1 rounded text-[8px] font-mono font-bold border transition-all cursor-pointer ${
                       baritonePreset === "pleiades" && forceBaritonePitch
@@ -3830,8 +3833,8 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                       setBaritonePreset("sirius");
                       setBaritonePitchValue(0.18);
                       setCustomPitchValue(0.18);
-                      localStorage.setItem("antena_baritone_pitch", "0.18");
-                      localStorage.setItem("antena_baritone_preset", "sirius");
+                      safeStorage.setItem("antena_baritone_pitch", "0.18");
+                      safeStorage.setItem("antena_baritone_preset", "sirius");
                     }}
                     className={`px-2 py-1 rounded text-[8px] font-mono font-bold border transition-all cursor-pointer ${
                       baritonePreset === "sirius" && forceBaritonePitch
@@ -3849,8 +3852,8 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                       setBaritonePreset("ancient");
                       setBaritonePitchValue(0.20);
                       setCustomPitchValue(0.20);
-                      localStorage.setItem("antena_baritone_pitch", "0.20");
-                      localStorage.setItem("antena_baritone_preset", "ancient");
+                      safeStorage.setItem("antena_baritone_pitch", "0.20");
+                      safeStorage.setItem("antena_baritone_preset", "ancient");
                     }}
                     className={`px-2 py-1 rounded text-[8px] font-mono font-bold border transition-all cursor-pointer ${
                       baritonePreset === "ancient" && forceBaritonePitch
@@ -3875,7 +3878,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                       setBaritonePitchValue(val);
                       setCustomPitchValue(val);
                       setBaritonePreset("custom");
-                      localStorage.setItem("antena_baritone_pitch", String(val));
+                      safeStorage.setItem("antena_baritone_pitch", String(val));
                       if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
                     }}
                     className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-slate-900 rounded-lg"
@@ -5570,8 +5573,8 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                   const finalName = tempOperatorName.trim() || "Operador Local";
                   setOperatorName(finalName);
                   setOperatorRank(tempOperatorRank);
-                  localStorage.setItem("antena_operator_name", finalName);
-                  localStorage.setItem("antena_operator_rank", tempOperatorRank);
+                  safeStorage.setItem("antena_operator_name", finalName);
+                  safeStorage.setItem("antena_operator_rank", tempOperatorRank);
                   setIsOperatorModalOpen(false);
                   addToast(
                     "IDENTIFICACIÓN ACTUALIZADA",
@@ -5598,7 +5601,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         onToggleOperatorExclusion={(nextState) => {
           setIsExcludedOperator(nextState);
           if (typeof window !== "undefined") {
-            localStorage.setItem("antena_operator_excluded", String(nextState));
+            safeStorage.setItem("antena_operator_excluded", String(nextState));
           }
         }}
         isLowPowerMode={isLowPowerMode}

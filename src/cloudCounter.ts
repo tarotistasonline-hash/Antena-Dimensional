@@ -3,6 +3,8 @@
  * Registra visitas reales y eventos sin depender de Mixpanel ni servicios de pago.
  */
 
+import { safeStorage } from "./utils/storage";
+
 const STORAGE_VISITS_KEY = "antena_universal_visits_count";
 const STORAGE_EVENTS_KEY = "antena_telemetry_events_log";
 const LAST_INCREMENT_TIME_KEY = "antena_last_increment_time_epoch";
@@ -37,7 +39,7 @@ export const getDeviceInfo = (): string => {
 export const getLocalTelemetryLogs = (): TelemetryEvent[] => {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(STORAGE_EVENTS_KEY);
+    const raw = safeStorage.getItem(STORAGE_EVENTS_KEY);
     if (raw) return JSON.parse(raw);
   } catch (e) {}
   return [];
@@ -65,7 +67,7 @@ export const logTelemetryEvent = (
       device: getDeviceInfo(),
     };
     const updated = [newEvent, ...current].slice(0, 50); // Guardar los últimos 50 eventos
-    localStorage.setItem(STORAGE_EVENTS_KEY, JSON.stringify(updated));
+    safeStorage.setItem(STORAGE_EVENTS_KEY, JSON.stringify(updated));
     return updated;
   } catch (e) {
     return [];
@@ -76,7 +78,7 @@ export const logTelemetryEvent = (
 export const getStoredVisits = (): number => {
   if (typeof window === "undefined") return 298;
   try {
-    const val = localStorage.getItem(STORAGE_VISITS_KEY);
+    const val = safeStorage.getItem(STORAGE_VISITS_KEY);
     if (val) {
       const parsed = parseInt(val, 10);
       if (!isNaN(parsed) && parsed > 0) return Math.max(298, parsed);
@@ -90,7 +92,7 @@ export const saveStoredVisits = (count: number): number => {
   const safeVal = Math.max(298, count);
   if (typeof window !== "undefined") {
     try {
-      localStorage.setItem(STORAGE_VISITS_KEY, String(safeVal));
+      safeStorage.setItem(STORAGE_VISITS_KEY, String(safeVal));
     } catch (e) {}
   }
   return safeVal;
@@ -112,16 +114,16 @@ export const isCurrentOperatorExcluded = (): boolean => {
   } catch (e) {}
 
   // Por defecto NO excluir a nadie para que las visitas siempre cuenten
-  return localStorage.getItem("antena_operator_excluded") === "true";
+  return safeStorage.getItem("antena_operator_excluded") === "true";
 };
 
 // Activa o desactiva la exclusión del operador
 export const setOperatorExclusionState = (excluded: boolean): boolean => {
   if (typeof window !== "undefined") {
     try {
-      localStorage.setItem("antena_operator_excluded", String(excluded));
-      localStorage.setItem("antena_exclude_my_visits_v2", String(excluded));
-      localStorage.setItem("antena_exclude_my_visits", String(excluded));
+      safeStorage.setItem("antena_operator_excluded", String(excluded));
+      safeStorage.setItem("antena_exclude_my_visits_v2", String(excluded));
+      safeStorage.setItem("antena_exclude_my_visits", String(excluded));
     } catch (e) {}
   }
   return excluded;

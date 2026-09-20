@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { safeStorage } from "../utils/storage";
 import { Lock, ShieldCheck, KeyRound, X, Eye, EyeOff, Sparkles } from "lucide-react";
 
 interface OperatorAuthModalProps {
@@ -28,7 +29,7 @@ export const OperatorAuthModal: React.FC<OperatorAuthModalProps> = ({
   const handleSaveCustomPin = (e: React.FormEvent) => {
     e.preventDefault();
     if (newPin.trim().length >= 3) {
-      localStorage.setItem("antena_custom_pin", newPin.trim());
+      safeStorage.setItem("antena_custom_pin", newPin.trim());
       setPinChangeSuccess(true);
       setTimeout(() => {
         setIsChangingPin(false);

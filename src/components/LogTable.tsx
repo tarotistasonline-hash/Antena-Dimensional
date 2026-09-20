@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { safeStorage } from "../utils/storage";
 import { LogEntry } from "../types";
 import {
   Search,
@@ -33,15 +34,15 @@ export default function LogTable({ logs, onClearLogs, onUpdateLogs }: LogTablePr
 
   // Política de expiración y almacenamiento local
   const [retentionPolicy, setRetentionPolicy] = useState<string>(() => {
-    return localStorage.getItem("antena_logs_retention_policy") || "30";
+    return safeStorage.getItem("antena_logs_retention_policy") || "30";
   });
   const [showPolicyPanel, setShowPolicyPanel] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
 
-  // Guardar cambio de política en localStorage
+  // Guardar cambio de política en safeStorage
   const handlePolicyChange = (newPolicy: string) => {
     setRetentionPolicy(newPolicy);
-    localStorage.setItem("antena_logs_retention_policy", newPolicy);
+    safeStorage.setItem("antena_logs_retention_policy", newPolicy);
   };
 
   // Cálculo de logs expirados según la política

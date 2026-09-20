@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   ChevronRight,
   MessageSquare,
+  BookOpen,
   Globe2,
   Share2,
   X,
@@ -945,8 +946,8 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
           <Radio className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>
             {isOperatorAdmin
-              ? "¿Deseas calibrar frecuencias y osciloscopio en la consola avanzada o gestionar el blog?"
-              : "Estación activa en frecuencia interestelar. Puedes explorar propuestas o reflexiones comunitarias."}
+              ? "¿Deseas calibrar frecuencias y osciloscopio en la consola avanzada o revisar el Libro de Visitas?"
+              : "Estación activa en frecuencia interestelar. Puedes leer los mensajes y saludos en nuestro Libro de Visitas."}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -956,7 +957,8 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
               onClick={onOpenBlog}
               className="px-3.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold transition-all cursor-pointer flex items-center gap-1.5"
             >
-              <span>📜 Blog y Propuestas</span>
+              <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+              <span>📖 Libro de Visitas</span>
             </button>
           )}
           {isOperatorAdmin && (
