@@ -1,24 +1,31 @@
 /**
- * Contador de Visitas Reales y Telemetría Autónomo
- * Registra visitas reales persistentes en el servidor sin dependencias ni cuentas externas.
+ * Contador de Visitas Reales y Telemetría Persistente en Cloud Firestore
+ * Registra visitas reales en base de datos persistente compartida entre todas las URLs y dispositivos.
  */
 
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  runTransaction,
+  serverTimestamp,
+  setDoc,
+  Timestamp,
+} from "firebase/firestore";
+import { auth, db, handleFirestoreError, isFirebaseAdminUser, OperationType } from "./firebase";
 import { safeStorage, safeSessionStorage } from "./utils/storage";
 
-const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 6000): Promise<Response> => {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-};
-
 const STORAGE_VISITS_KEY = "antena_universal_visits_count";
+const STORAGE_REAL_VISITS_KEY = "antena_real_firestore_visits_count";
 const STORAGE_EVENTS_KEY = "antena_telemetry_events_log";
 const LAST_INCREMENT_TIME_KEY = "antena_last_increment_time_epoch";
 const SESSION_COUNTED_KEY = "antena_visit_session_counted";
+const SESSION_HASH_KEY = "antena_visitor_session_hash";
 const VISIT_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutos para evitar inflar con recargas rápidas
 
 export interface TelemetryEvent {
@@ -33,13 +40,45 @@ export interface ServerVisitLog {
   id: string;
   timestamp: string;
   device: string;
+  host?: string;
+  path?: string;
 }
 
 export interface ServerVisitStats {
   visits: number;
+  realVerifiedCount: number;
   updatedAt?: string;
   recentVisits: ServerVisitLog[];
 }
+
+const sanitizeId = (raw: string, maxLen = 64): string => {
+  const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, maxLen);
+  return cleaned || "anon_" + Date.now().toString(36);
+};
+
+const getSessionHash = (): string => {
+  if (typeof window === "undefined") return "ssr_session";
+  let existing = safeStorage.getItem(SESSION_HASH_KEY);
+  if (!existing) {
+    existing = sanitizeId(
+      "sess_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 10),
+      64
+    );
+    safeStorage.setItem(SESSION_HASH_KEY, existing);
+  }
+  return sanitizeId(existing, 64);
+};
+
+const formatFirestoreTimestamp = (ts: unknown): string => {
+  if (ts instanceof Timestamp) {
+    return ts.toDate().toISOString();
+  }
+  if (ts && typeof (ts as any).toDate === "function") {
+    return (ts as any).toDate().toISOString();
+  }
+  if (typeof ts === "string") return ts;
+  return new Date().toISOString();
+};
 
 // Obtener info básica del dispositivo del visitante
 export const getDeviceInfo = (): string => {
@@ -56,7 +95,7 @@ export const getDeviceInfo = (): string => {
   else if (/Firefox/i.test(ua)) browser = "Firefox";
   else if (/Edg/i.test(ua)) browser = "Edge";
 
-  return `${device} — ${browser}`;
+  return `${device} — ${browser}`.slice(0, 100);
 };
 
 // Obtener lista de eventos de telemetría guardados localmente
@@ -111,12 +150,27 @@ export const getStoredVisits = (): number => {
   return 303;
 };
 
+export const getStoredRealVisits = (): number => {
+  if (typeof window === "undefined") return 0;
+  try {
+    const val = safeStorage.getItem(STORAGE_REAL_VISITS_KEY);
+    if (val) {
+      const parsed = parseInt(val, 10);
+      if (!isNaN(parsed) && parsed >= 0) return parsed;
+    }
+  } catch (e) {}
+  return 0;
+};
+
 // Guardar conteo en caché local
-export const saveStoredVisits = (count: number): number => {
+export const saveStoredVisits = (count: number, realVerifiedCount?: number): number => {
   const safeVal = Math.max(0, Math.floor(count));
   if (typeof window !== "undefined") {
     try {
       safeStorage.setItem(STORAGE_VISITS_KEY, String(safeVal));
+      if (typeof realVerifiedCount === "number" && !isNaN(realVerifiedCount)) {
+        safeStorage.setItem(STORAGE_REAL_VISITS_KEY, String(Math.max(0, Math.floor(realVerifiedCount))));
+      }
     } catch (e) {}
   }
   return safeVal;
@@ -152,44 +206,134 @@ export const setOperatorExclusionState = (excluded: boolean): boolean => {
   return excluded;
 };
 
-// Obtiene conteo real y registros recientes en vivo desde el servidor
+// Obtiene conteo real y registros recientes en vivo desde Firestore
 export const fetchServerVisitStats = async (): Promise<ServerVisitStats> => {
   let count = getStoredVisits();
+  let realVerifiedCount = getStoredRealVisits();
   let recentVisits: ServerVisitLog[] = [];
   let updatedAt: string | undefined;
+
+  const statsPath = "site_stats/global";
   try {
-    const res = await fetchWithTimeout("/api/visits?t=" + Date.now(), {
-      method: "GET",
-      headers: {
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache",
-      },
-    }, 6000);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && typeof data.visits === "number") {
-        count = saveStoredVisits(data.visits);
+    const statsSnap = await getDoc(doc(db, "site_stats", "global"));
+    if (statsSnap.exists()) {
+      const data = statsSnap.data();
+      if (typeof data.count === "number") {
+        realVerifiedCount = typeof data.realVerifiedCount === "number" ? data.realVerifiedCount : 0;
+        count = saveStoredVisits(data.count, realVerifiedCount);
       }
-      if (Array.isArray(data?.recentVisits)) {
-        recentVisits = data.recentVisits;
-      }
-      if (typeof data?.updatedAt === "string") {
-        updatedAt = data.updatedAt;
+      if (data.updatedAt) {
+        updatedAt = formatFirestoreTimestamp(data.updatedAt);
       }
     }
-  } catch (e) {
-    // Si la red falla, se conserva la copia local
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, statsPath);
   }
-  return { visits: count, updatedAt, recentVisits };
+
+  const eventsPath = "visit_events";
+  try {
+    const eventsQuery = query(
+      collection(db, "visit_events"),
+      orderBy("createdAt", "desc"),
+      limit(25)
+    );
+    const eventsSnap = await getDocs(eventsQuery);
+    recentVisits = eventsSnap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        timestamp: formatFirestoreTimestamp(data.createdAt),
+        device: typeof data.device === "string" ? data.device : "Navegador Web",
+        host: typeof data.host === "string" ? data.host : undefined,
+        path: typeof data.path === "string" ? data.path : undefined,
+      };
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, eventsPath);
+  }
+
+  return { visits: count, realVerifiedCount, updatedAt, recentVisits };
 };
 
-// Sincroniza y obtiene el conteo real en vivo desde el servidor
+// Suscripción en tiempo real a Firestore para estadísticas y últimas visitas
+export const subscribeToVisitStats = (
+  onUpdate: (stats: ServerVisitStats) => void
+): (() => void) => {
+  let latestStats = {
+    visits: getStoredVisits(),
+    realVerifiedCount: getStoredRealVisits(),
+    updatedAt: undefined as string | undefined,
+  };
+  let latestLogs: ServerVisitLog[] = [];
+
+  const emit = () => {
+    onUpdate({
+      visits: latestStats.visits,
+      realVerifiedCount: latestStats.realVerifiedCount,
+      updatedAt: latestStats.updatedAt,
+      recentVisits: latestLogs,
+    });
+  };
+
+  const unsubStats = onSnapshot(
+    doc(db, "site_stats", "global"),
+    (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const count = typeof data.count === "number" ? data.count : latestStats.visits;
+        const realCount = typeof data.realVerifiedCount === "number" ? data.realVerifiedCount : 0;
+        saveStoredVisits(count, realCount);
+        latestStats = {
+          visits: count,
+          realVerifiedCount: realCount,
+          updatedAt: data.updatedAt ? formatFirestoreTimestamp(data.updatedAt) : undefined,
+        };
+        emit();
+      }
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, "site_stats/global");
+    }
+  );
+
+  const eventsQuery = query(
+    collection(db, "visit_events"),
+    orderBy("createdAt", "desc"),
+    limit(25)
+  );
+  const unsubEvents = onSnapshot(
+    eventsQuery,
+    (snap) => {
+      latestLogs = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          timestamp: formatFirestoreTimestamp(data.createdAt),
+          device: typeof data.device === "string" ? data.device : "Navegador Web",
+          host: typeof data.host === "string" ? data.host : undefined,
+          path: typeof data.path === "string" ? data.path : undefined,
+        };
+      });
+      emit();
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.LIST, "visit_events");
+    }
+  );
+
+  return () => {
+    unsubStats();
+    unsubEvents();
+  };
+};
+
+// Sincroniza y obtiene el conteo real en vivo desde Firestore
 export const fetchServerVisits = async (): Promise<number> => {
   const stats = await fetchServerVisitStats();
   return stats.visits;
 };
 
-// Registrar visita real (1 vez por sesión / ventana de 30 min, o forzada manualmente por el admin)
+// Registrar visita real atómicamente en Firestore (1 vez por sesión / ventana de 30 min, o forzada manualmente)
 export const registerUniversalVisit = async (force: boolean = false): Promise<number> => {
   let count = getStoredVisits();
   const isExcluded = isCurrentOperatorExcluded();
@@ -210,35 +354,68 @@ export const registerUniversalVisit = async (force: boolean = false): Promise<nu
     safeStorage.setItem(LAST_INCREMENT_TIME_KEY, String(now));
 
     const deviceInfo = getDeviceInfo();
-    logTelemetryEvent("visita", `Nueva visita real registrada desde ${deviceInfo}`);
+    const rawHost = typeof window !== "undefined" ? window.location.hostname || "web" : "web";
+    const rawPath = typeof window !== "undefined" ? window.location.pathname || "/" : "/";
+    const host = rawHost.slice(0, 120) || "web";
+    const path = rawPath.slice(0, 120) || "/";
+    const sessionHash = getSessionHash();
+    const visitId = sanitizeId(
+      "v_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 8),
+      128
+    );
+
+    logTelemetryEvent("visita", `Nueva visita real registrada desde ${deviceInfo} (${host})`);
+
+    const statsRef = doc(db, "site_stats", "global");
+    const visitRef = doc(db, "visit_events", visitId);
 
     try {
-      const res = await fetchWithTimeout("/api/visits/increment", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache",
-        },
-        body: JSON.stringify({ device: deviceInfo }),
-      }, 6000);
+      const result = await runTransaction(db, async (tx) => {
+        const statsSnap = await tx.get(statsRef);
+        let nextCount = 304;
+        let nextRealCount = 1;
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data && typeof data.visits === "number") {
-          count = saveStoredVisits(data.visits);
-          return count;
+        if (statsSnap.exists()) {
+          const data = statsSnap.data();
+          const curCount = typeof data.count === "number" ? data.count : 303;
+          const curReal = typeof data.realVerifiedCount === "number" ? data.realVerifiedCount : 0;
+          nextCount = curCount + 1;
+          nextRealCount = curReal + 1;
+
+          tx.update(statsRef, {
+            count: nextCount,
+            realVerifiedCount: nextRealCount,
+            lastVisitId: visitId,
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          tx.set(statsRef, {
+            count: 304,
+            realVerifiedCount: 1,
+            lastVisitId: visitId,
+            updatedAt: serverTimestamp(),
+          });
         }
-      }
-    } catch (e) {
-      count += 1;
-      saveStoredVisits(count);
+
+        tx.set(visitRef, {
+          device: deviceInfo,
+          host,
+          path,
+          sessionHash,
+          createdAt: serverTimestamp(),
+        });
+
+        return { nextCount, nextRealCount };
+      });
+
+      count = saveStoredVisits(result.nextCount, result.nextRealCount);
       return count;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, "site_stats/global");
     }
   } else {
     return fetchServerVisits();
   }
-
-  return count;
 };
 
 // Forzar incremento explícito (+1 de prueba o botón directo del administrador)
@@ -246,23 +423,30 @@ export const incrementServerVisit = async (): Promise<number> => {
   return registerUniversalVisit(true);
 };
 
-// Calibrar o establecer el conteo manualmente desde la consola de operador
+// Calibrar o establecer el conteo manualmente desde la consola de operador (requiere Admin Google Auth)
 export const setUniversalVisits = async (newCount: number): Promise<number> => {
-  const val = Math.max(0, Math.floor(newCount));
+  const val = Math.max(0, Math.min(100000000, Math.floor(newCount)));
+  if (!isFirebaseAdminUser(auth.currentUser)) {
+    throw new Error("ADMIN_AUTH_REQUIRED");
+  }
+
   saveStoredVisits(val);
-  logTelemetryEvent("visita", `Contador calibrado manualmente a ${val}`);
+  logTelemetryEvent("visita", `Contador calibrado en Firestore a ${val}`);
+
+  const statsRef = doc(db, "site_stats", "global");
   try {
-    const res = await fetchWithTimeout("/api/visits/set", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ count: val }),
-    }, 6000);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && typeof data.visits === "number") {
-        return saveStoredVisits(data.visits);
-      }
-    }
-  } catch (e) {}
-  return val;
+    const snap = await getDoc(statsRef);
+    const currentReal = snap.exists() && typeof snap.data().realVerifiedCount === "number"
+      ? snap.data().realVerifiedCount
+      : 0;
+    await setDoc(statsRef, {
+      count: val,
+      realVerifiedCount: currentReal,
+      lastVisitId: "admin_calibration",
+      updatedAt: serverTimestamp(),
+    });
+    return saveStoredVisits(val, currentReal);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, "site_stats/global");
+  }
 };

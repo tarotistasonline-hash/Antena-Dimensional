@@ -7,16 +7,28 @@ import {
   RefreshCw,
   X,
   Globe,
+  Database,
+  LogIn,
+  CheckCircle2,
 } from "lucide-react";
+import { User } from "firebase/auth";
 import {
   setUniversalVisits,
   getLocalTelemetryLogs,
   getDeviceInfo,
+  getStoredRealVisits,
   TelemetryEvent,
   ServerVisitLog,
   fetchServerVisitStats,
   incrementServerVisit,
+  subscribeToVisitStats,
 } from "../cloudCounter";
+import {
+  ADMIN_EMAIL,
+  isFirebaseAdminUser,
+  signInFirebaseAdmin,
+  subscribeToAuthUser,
+} from "../firebase";
 import { safeStorage } from "../utils/storage";
 
 interface TelemetryModalProps {
@@ -45,51 +57,126 @@ export const TelemetryModal: React.FC<TelemetryModalProps> = ({
   const [customVisitsInput, setCustomVisitsInput] = useState("");
   const [logs, setLogs] = useState<TelemetryEvent[]>(() => getLocalTelemetryLogs());
   const [serverVisits, setServerVisits] = useState<ServerVisitLog[]>([]);
+  const [realVerifiedCount, setRealVerifiedCount] = useState<number>(() => getStoredRealVisits());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [isSigningInAdmin, setIsSigningInAdmin] = useState(false);
+
+  useEffect(() => {
+    const unsubAuth = subscribeToAuthUser((user) => {
+      setAuthUser(user);
+    });
+    return () => unsubAuth();
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
     setLogs(getLocalTelemetryLogs());
+
+    const unsubStats = subscribeToVisitStats((stats) => {
+      onVisitsChange(stats.visits);
+      setRealVerifiedCount(stats.realVerifiedCount);
+      setServerVisits(stats.recentVisits);
+    });
+
     fetchServerVisitStats()
       .then((stats) => {
         onVisitsChange(stats.visits);
+        setRealVerifiedCount(stats.realVerifiedCount);
         setServerVisits(stats.recentVisits);
       })
       .catch(() => {});
+
+    return () => {
+      unsubStats();
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
 
+  const isAdminVerified = isFirebaseAdminUser(authUser);
+
+  const handleAdminGoogleLogin = async () => {
+    try {
+      setIsSigningInAdmin(true);
+      const user = await signInFirebaseAdmin();
+      if (user && !isFirebaseAdminUser(user)) {
+        addToast(
+          "CUENTA SIN PERMISOS ADMIN",
+          `Iniciaste sesión como ${user.email || "otro usuario"}. Se requiere ${ADMIN_EMAIL} para calibrar la base de datos.`,
+          "anomaly"
+        );
+      } else if (user) {
+        addToast(
+          "ADMIN VERIFICADO",
+          "Conectado con Firestore como administrador verificado.",
+          "high-intensity"
+        );
+      }
+    } catch (err) {
+      addToast("AUTENTICACIÓN CANCELADA", "No se completó el inicio de sesión con Google.", "anomaly");
+    } finally {
+      setIsSigningInAdmin(false);
+    }
+  };
+
   const handleRefresh = async () => {
-    setIsRefreshing(true);
-    const stats = await fetchServerVisitStats();
-    onVisitsChange(stats.visits);
-    setServerVisits(stats.recentVisits);
-    setLogs(getLocalTelemetryLogs());
-    setIsRefreshing(false);
-    addToast("VISITAS SINCRONIZADAS", `Total real en servidor: ${stats.visits}`, "high-intensity");
+    try {
+      setIsRefreshing(true);
+      const stats = await fetchServerVisitStats();
+      onVisitsChange(stats.visits);
+      setRealVerifiedCount(stats.realVerifiedCount);
+      setServerVisits(stats.recentVisits);
+      setLogs(getLocalTelemetryLogs());
+      addToast(
+        "BASE DE DATOS SINCRONIZADA",
+        `Total: ${stats.visits} | Reales en DB: ${stats.realVerifiedCount}`,
+        "high-intensity"
+      );
+    } catch (e) {
+      addToast("AVISO DE CONEXIÓN", "No se pudo consultar la base de datos en este momento.", "anomaly");
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleSetCustomVisits = async () => {
+    if (!isAdminVerified) {
+      addToast(
+        "VERIFICACIÓN REQUERIDA",
+        "Conecta tu cuenta Google de administrador para calibrar la cifra en la base de datos.",
+        "anomaly"
+      );
+      return;
+    }
     const num = parseInt(customVisitsInput, 10);
     if (isNaN(num) || num < 0) {
       addToast("NÚMERO INVÁLIDO", "Ingresa una cifra válida mayor o igual a 0.", "anomaly");
       return;
     }
-    const saved = await setUniversalVisits(num);
-    onVisitsChange(saved);
-    setLogs(getLocalTelemetryLogs());
-    setCustomVisitsInput("");
-    addToast("VISITAS ACTUALIZADAS", `Contador establecido en: ${saved}`, "high-intensity");
+    try {
+      const saved = await setUniversalVisits(num);
+      onVisitsChange(saved);
+      setLogs(getLocalTelemetryLogs());
+      setCustomVisitsInput("");
+      addToast("VISITAS ACTUALIZADAS", `Contador guardado en Firestore: ${saved}`, "high-intensity");
+    } catch (err) {
+      addToast("ERROR AL CALIBRAR", "No se pudo actualizar la cifra en la base de datos.", "anomaly");
+    }
   };
 
   const handleTestVisit = async () => {
-    const saved = await incrementServerVisit();
-    onVisitsChange(saved);
-    const stats = await fetchServerVisitStats();
-    setServerVisits(stats.recentVisits);
-    setLogs(getLocalTelemetryLogs());
-    addToast("VISITA REGISTRADA (+1)", `Total de visitas en servidor: ${saved}`, "high-intensity");
+    try {
+      const saved = await incrementServerVisit();
+      onVisitsChange(saved);
+      const stats = await fetchServerVisitStats();
+      setRealVerifiedCount(stats.realVerifiedCount);
+      setServerVisits(stats.recentVisits);
+      setLogs(getLocalTelemetryLogs());
+      addToast("VISITA REGISTRADA (+1)", `Guardado en Firestore. Total: ${saved}`, "high-intensity");
+    } catch (err) {
+      addToast("AVISO", "No se pudo registrar la visita de prueba.", "anomaly");
+    }
   };
 
   const handleClearLogs = () => {
@@ -114,6 +201,17 @@ export const TelemetryModal: React.FC<TelemetryModalProps> = ({
     }
   };
 
+  const formatHostBadge = (host?: string) => {
+    if (!host) return null;
+    if (host.startsWith("ais-pre-")) {
+      return { label: "Enlace Compartido", color: "text-cyan-300 bg-cyan-950/80 border-cyan-700/60" };
+    }
+    if (host.startsWith("ais-dev-")) {
+      return { label: "Vista Previa", color: "text-amber-300 bg-amber-950/80 border-amber-700/60" };
+    }
+    return { label: host, color: "text-slate-300 bg-slate-800 border-slate-700" };
+  };
+
   return (
     <div
       className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in text-slate-200"
@@ -133,8 +231,9 @@ export const TelemetryModal: React.FC<TelemetryModalProps> = ({
               <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider font-mono">
                 Contador de Visitas Reales en Vivo
               </h3>
-              <p className="text-[10px] text-emerald-400 font-mono">
-                Registro directo y autónomo en servidor propio
+              <p className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                <Database className="w-3 h-3" />
+                <span>Base de Datos Persistente Cloud Firestore</span>
               </p>
             </div>
           </div>
@@ -155,10 +254,10 @@ export const TelemetryModal: React.FC<TelemetryModalProps> = ({
               <div className="space-y-0.5">
                 <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
                   <Users className="w-4 h-4 text-emerald-400" />
-                  TOTAL DE VISITAS REALES:
+                  TOTAL DE VISITAS ACUMULADAS:
                 </span>
                 <span className="text-[9px] font-mono text-slate-400 block">
-                  Contador autónomo en tiempo real sin rastreadores externos
+                  Base histórica + visitas reales persistidas en la nube
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -168,17 +267,50 @@ export const TelemetryModal: React.FC<TelemetryModalProps> = ({
                 </span>
               </div>
             </div>
+
+            <div className="flex items-center justify-between gap-2 bg-slate-900/90 border border-cyan-500/30 rounded-lg px-3 py-2">
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-mono text-cyan-300 font-bold uppercase tracking-wider block">
+                  VISITAS REALES VERIFICADAS EN FIRESTORE:
+                </span>
+                <span className="text-[9px] font-mono text-slate-400 block">
+                  Entradas únicas reales registradas desde que se activó la base de datos
+                </span>
+              </div>
+              <span className="text-lg font-mono font-black text-cyan-300 bg-cyan-950/80 px-2.5 py-0.5 rounded border border-cyan-700/60">
+                {realVerifiedCount.toLocaleString()}
+              </span>
+            </div>
+
             <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
-              Cada nueva sesión de visitante que ingresa a la estación suma +1 automáticamente en el servidor y mantiene el conteo real acumulado.
+              Cada nueva sesión de visitante (ya sea desde el enlace compartido o la vista previa) queda guardada de forma permanente en Cloud Firestore aunque el servidor se reinicie.
             </p>
 
             {/* Controles exclusivos del Administrador */}
             {isOperatorAdmin && (
               <>
-                <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2">
-                  <label className="text-[10px] font-mono text-slate-300 font-bold block">
-                    Calibrar o ajustar cifra de visitas acumuladas:
-                  </label>
+                <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-[10px] font-mono text-slate-300 font-bold block">
+                      Calibrar o ajustar cifra acumulada en Firestore:
+                    </label>
+                    {isAdminVerified ? (
+                      <span className="text-[9px] font-mono text-emerald-400 flex items-center gap-1 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-700/60">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>{authUser?.email}</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isSigningInAdmin}
+                        onClick={handleAdminGoogleLogin}
+                        className="text-[10px] font-mono bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 px-2.5 py-1 rounded border border-amber-500/50 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <LogIn className="w-3 h-3" />
+                        <span>{isSigningInAdmin ? "Conectando..." : "Conectar Cuenta Admin (Google)"}</span>
+                      </button>
+                    )}
+                  </div>
                   <div className="flex gap-2">
                     <input
                       type="number"
@@ -243,8 +375,8 @@ export const TelemetryModal: React.FC<TelemetryModalProps> = ({
                 <strong className="text-cyan-300 truncate">{getDeviceInfo()}</strong>
               </div>
               <div className="bg-slate-900/90 p-2 rounded border border-slate-800 flex justify-between gap-2">
-                <span className="text-slate-400">Estado de Red:</span>
-                <strong className="text-emerald-400">En Línea</strong>
+                <span className="text-slate-400">Base de Datos:</span>
+                <strong className="text-emerald-400">Firestore Activo</strong>
               </div>
               {isOperatorAdmin && (
                 <>
@@ -308,12 +440,12 @@ export const TelemetryModal: React.FC<TelemetryModalProps> = ({
             </div>
           )}
 
-          {/* Registro Real de Últimas Visitas en Servidor */}
+          {/* Registro Real de Últimas Visitas en Firestore */}
           <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Activity className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                ÚLTIMAS VISITAS REALES EN SERVIDOR:
+                ÚLTIMAS VISITAS REALES EN BASE DE DATOS:
               </span>
               <span className="text-[9px] font-mono text-slate-500">
                 {serverVisits.length} recientes
@@ -323,25 +455,36 @@ export const TelemetryModal: React.FC<TelemetryModalProps> = ({
             {serverVisits.length === 0 ? (
               <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800 text-center">
                 <p className="text-[10px] font-mono text-slate-400">
-                  Las nuevas entradas de visitantes aparecerán aquí en tiempo real.
+                  Las nuevas entradas de visitantes quedarán registradas aquí de forma permanente.
                 </p>
               </div>
             ) : (
-              <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
-                {serverVisits.map((v) => (
-                  <div
-                    key={v.id}
-                    className="bg-slate-900/90 p-2 rounded-lg border border-slate-800 text-[10px] font-mono flex items-center justify-between gap-2"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                      <span className="text-slate-200 truncate">{v.device}</span>
+              <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+                {serverVisits.map((v) => {
+                  const hostBadge = formatHostBadge(v.host);
+                  return (
+                    <div
+                      key={v.id}
+                      className="bg-slate-900/90 p-2 rounded-lg border border-slate-800 text-[10px] font-mono flex items-center justify-between gap-2"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                        <span className="text-slate-200 truncate">{v.device}</span>
+                        {hostBadge && (
+                          <span
+                            title={v.host}
+                            className={`text-[8.5px] px-1.5 py-0.5 rounded border shrink-0 ${hostBadge.color}`}
+                          >
+                            {hostBadge.label}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-slate-400 text-[9px] shrink-0">
+                        {formatIsoTime(v.timestamp)}
+                      </span>
                     </div>
-                    <span className="text-slate-400 text-[9px] shrink-0">
-                      {formatIsoTime(v.timestamp)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -399,7 +542,7 @@ export const TelemetryModal: React.FC<TelemetryModalProps> = ({
         {/* Footer del Modal */}
         <div className="p-4 bg-slate-950/90 border-t border-slate-800 flex items-center justify-between gap-3 shrink-0">
           <span className="text-[9px] font-mono text-slate-500">
-            Sincronización en tiempo real activa
+            Sincronización en tiempo real con Cloud Firestore
           </span>
           <button
             type="button"

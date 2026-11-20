@@ -21,6 +21,20 @@ import {
   Heart,
   Sparkles,
 } from "lucide-react";
+import {
+  collection,
+  doc,
+  getDoc,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  runTransaction,
+  serverTimestamp,
+  setDoc,
+  Timestamp,
+} from "firebase/firestore";
+import { db, handleFirestoreError, OperationType } from "../firebase";
 import { logTelemetryEvent } from "../cloudCounter";
 import { safeStorage } from "../utils/storage";
 
@@ -40,7 +54,7 @@ export interface GuestbookEntry {
   rating?: number;
   content: string;
   votes: number;
-  votedBy: string[];
+  commentsCount: number;
   comments: GuestbookComment[];
   createdAt: string;
 }
@@ -54,8 +68,19 @@ export interface SuggestionsBlogViewProps {
   onToggleMaximize?: () => void;
 }
 
+const formatTimestampIso = (val: unknown): string => {
+  if (val instanceof Timestamp) return val.toDate().toISOString();
+  if (val && typeof (val as any).toDate === "function") return (val as any).toDate().toISOString();
+  if (typeof val === "string") return val;
+  return new Date().toISOString();
+};
+
+const sanitizeId = (raw: string, maxLen = 64): string => {
+  const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, maxLen);
+  return cleaned || "vis_" + Date.now().toString(36);
+};
+
 export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
-  operatorName,
   addToast,
   isInsideModal = false,
   onOpenAsTab,
@@ -63,6 +88,8 @@ export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
   onToggleMaximize,
 }) => {
   const [entries, setEntries] = useState<GuestbookEntry[]>([]);
+  const [votedMap, setVotedMap] = useState<Record<string, boolean>>({});
+  const [commentsMap, setCommentsMap] = useState<Record<string, GuestbookComment[]>>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortBy, setSortBy] = useState<"recent" | "popular">("recent");
@@ -76,7 +103,7 @@ export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
   const [newAuthor, setNewAuthor] = useState<string>("");
   const [newLocation, setNewLocation] = useState<string>("");
   const [newRating, setNewRating] = useState<number>(5);
-  const [newRecommend, setNewRecommend] = useState<string>("Sí, lo recomiendo");
+  const [newRecommend, setNewRecommend] = useState<"Sí, lo recomiendo" | "Neutral" | "No me gustó">("Sí, lo recomiendo");
   const [newContent, setNewContent] = useState<string>("");
   const [submitting, setSubmitting] = useState<boolean>(false);
 
@@ -92,72 +119,170 @@ export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
     if (typeof window !== "undefined") {
       let id = safeStorage.getItem("antena_local_distinct_id");
       if (!id) {
-        id = "vis_" + Math.random().toString(36).substring(2, 9);
+        id = "vis_" + Math.random().toString(36).substring(2, 10);
         safeStorage.setItem("antena_local_distinct_id", id);
       }
-      return id;
+      return sanitizeId(id, 64);
     }
     return "vis_anon";
   };
 
   const distinctId = getLocalDistinctId();
 
-  // Load entries from server API
-  const loadEntries = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/guestbook");
-      if (res.ok) {
-        const data = await res.json();
-        const items = data.guestbook || data.opinions || data.suggestions || [];
-        setEntries(items);
-      }
-    } catch (err) {
-      console.warn("Error al cargar libro de visitas:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Real-time Firestore listener for guestbook entries
   useEffect(() => {
-    loadEntries();
+    setLoading(true);
+    const entriesQuery = query(
+      collection(db, "guestbook_entries"),
+      orderBy("createdAt", "desc"),
+      limit(50)
+    );
+
+    const unsubscribe = onSnapshot(
+      entriesQuery,
+      (snapshot) => {
+        const loaded: GuestbookEntry[] = snapshot.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            title: typeof data.title === "string" ? data.title : "Visita a la página",
+            author: typeof data.author === "string" ? data.author : "Visitante",
+            location: typeof data.location === "string" ? data.location : undefined,
+            recommend: typeof data.recommend === "string" ? data.recommend : "Sí, lo recomiendo",
+            rating: typeof data.rating === "number" ? data.rating : 5,
+            content: typeof data.content === "string" ? data.content : "",
+            votes: typeof data.votesCount === "number" ? data.votesCount : 0,
+            commentsCount: typeof data.commentsCount === "number" ? data.commentsCount : 0,
+            comments: [],
+            createdAt: formatTimestampIso(data.createdAt),
+          };
+        });
+        setEntries(loaded);
+        setLoading(false);
+      },
+      (error) => {
+        setLoading(false);
+        handleFirestoreError(error, OperationType.LIST, "guestbook_entries");
+      }
+    );
+
+    return () => unsubscribe();
   }, []);
 
-  // Handle like / useful vote
-  const handleVote = async (id: string) => {
+  // Check whether current visitor has voted on loaded entries
+  useEffect(() => {
+    if (entries.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      entries.map(async (entry) => {
+        const votePath = `guestbook_entries/${entry.id}/votes/${distinctId}`;
+        try {
+          const voteSnap = await getDoc(doc(db, "guestbook_entries", entry.id, "votes", distinctId));
+          return [entry.id, voteSnap.exists()] as const;
+        } catch (error) {
+          handleFirestoreError(error, OperationType.GET, votePath);
+        }
+      })
+    )
+      .then((results) => {
+        if (cancelled) return;
+        const nextMap: Record<string, boolean> = {};
+        for (const [id, voted] of results) {
+          nextMap[id] = voted;
+        }
+        setVotedMap(nextMap);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [entries.map((e) => e.id).join(","), distinctId]);
+
+  // Subscribe to comments for any expanded guestbook entry
+  useEffect(() => {
+    const activeIds = Object.keys(expandedComments).filter((id) => expandedComments[id]);
+    if (activeIds.length === 0) return;
+
+    const unsubscribers = activeIds.map((entryId) => {
+      const commentsPath = `guestbook_entries/${entryId}/comments`;
+      const commentsQuery = query(
+        collection(db, "guestbook_entries", entryId, "comments"),
+        orderBy("createdAt", "asc"),
+        limit(100)
+      );
+      return onSnapshot(
+        commentsQuery,
+        (snapshot) => {
+          const loadedComments: GuestbookComment[] = snapshot.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              author: typeof data.author === "string" ? data.author : "Visitante",
+              content: typeof data.content === "string" ? data.content : "",
+              timestamp: formatTimestampIso(data.createdAt),
+            };
+          });
+          setCommentsMap((prev) => ({
+            ...prev,
+            [entryId]: loadedComments,
+          }));
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.LIST, commentsPath);
+        }
+      );
+    });
+
+    return () => {
+      unsubscribers.forEach((unsub) => unsub());
+    };
+  }, [JSON.stringify(expandedComments)]);
+
+  // Handle atomic like / useful vote in Firestore
+  const handleVote = async (entryId: string) => {
+    const entryPath = `guestbook_entries/${entryId}`;
+    const entryRef = doc(db, "guestbook_entries", entryId);
+    const voteRef = doc(db, "guestbook_entries", entryId, "votes", distinctId);
+
     try {
-      const res = await fetch(`/api/guestbook/${id}/vote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voterId: distinctId }),
+      const nextHasVoted = await runTransaction(db, async (tx) => {
+        const entrySnap = await tx.get(entryRef);
+        if (!entrySnap.exists()) {
+          throw new Error("Entrada no encontrada.");
+        }
+        const voteSnap = await tx.get(voteRef);
+        const currentVotes = typeof entrySnap.data().votesCount === "number" ? entrySnap.data().votesCount : 0;
+
+        if (voteSnap.exists()) {
+          tx.delete(voteRef);
+          tx.update(entryRef, {
+            votesCount: Math.max(0, currentVotes - 1),
+            lastInteractionId: distinctId,
+          });
+          return false;
+        } else {
+          tx.set(voteRef, {
+            voterId: distinctId,
+            createdAt: serverTimestamp(),
+          });
+          tx.update(entryRef, {
+            votesCount: currentVotes + 1,
+            lastInteractionId: distinctId,
+          });
+          return true;
+        }
       });
-      if (res.ok) {
-        const data = await res.json();
-        setEntries((prev) =>
-          prev.map((item) => {
-            if (item.id === id) {
-              const votedBy = item.votedBy || [];
-              const hasVoted = votedBy.includes(distinctId);
-              const nextVotedBy = hasVoted
-                ? votedBy.filter((v) => v !== distinctId)
-                : [...votedBy, distinctId];
-              return {
-                ...item,
-                votes: data.votes,
-                votedBy: nextVotedBy,
-              };
-            }
-            return item;
-          })
-        );
-        logTelemetryEvent("sintonizacion", `Me gusta en libro de visitas ${id}`);
-      }
+
+      setVotedMap((prev) => ({ ...prev, [entryId]: nextHasVoted }));
+      logTelemetryEvent("sintonizacion", `Me gusta en libro de visitas ${entryId}`);
     } catch (err) {
-      console.warn("Error votando:", err);
+      addToast("AVISO", "No se pudo actualizar tu voto en la base de datos.", "anomaly");
+      handleFirestoreError(err, OperationType.WRITE, entryPath);
     }
   };
 
-  // Handle Submit New Guestbook Entry
+  // Handle Submit New Guestbook Entry in Firestore
   const handleSubmitNew = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newContent.trim()) {
@@ -165,78 +290,89 @@ export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
       return;
     }
 
+    const entryId = sanitizeId(
+      "gb_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 7),
+      128
+    );
+    const entryPath = `guestbook_entries/${entryId}`;
+
+    const cleanTitle = (newTitle.trim() || "Visita a la página").slice(0, 120);
+    const cleanAuthor = (newAuthor.trim() || "Visitante").slice(0, 60);
+    const cleanLocation = (newLocation.trim() || "Visitante Web").slice(0, 80);
+    const cleanContent = newContent.trim().slice(0, 2000);
+    const cleanRating = Math.min(5, Math.max(1, Math.round(newRating)));
+
     try {
       setSubmitting(true);
-      const res = await fetch("/api/guestbook", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: newTitle.trim() || "Visita a la página",
-          author: newAuthor.trim() || "Visitante",
-          location: newLocation.trim() || "Visitante Web",
-          rating: newRating,
-          recommend: newRecommend,
-          content: newContent.trim(),
-        }),
+      await setDoc(doc(db, "guestbook_entries", entryId), {
+        title: cleanTitle,
+        author: cleanAuthor,
+        location: cleanLocation,
+        recommend: newRecommend,
+        rating: cleanRating,
+        content: cleanContent,
+        votesCount: 0,
+        commentsCount: 0,
+        lastInteractionId: "initial",
+        createdAt: serverTimestamp(),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        const savedItem = data.entry || data.opinion || data.suggestion;
-        if (savedItem) {
-          setEntries((prev) => [savedItem, ...prev]);
-        }
-        setNewTitle("");
-        setNewContent("");
-        setNewLocation("");
-        setIsInlineFormOpen(false);
-        setActiveSubTab("feed");
-        addToast("¡GRACIAS POR TU VISITA!", "Tu mensaje ha sido publicado en nuestro libro de visitas.", "high-intensity");
-        logTelemetryEvent("sintonizacion", `Firma en libro de visitas por ${newAuthor || "Visitante"}`);
-      } else {
-        addToast("AVISO", "No se pudo registrar el mensaje en el servidor.", "anomaly");
-      }
+      setNewTitle("");
+      setNewContent("");
+      setNewLocation("");
+      setIsInlineFormOpen(false);
+      setActiveSubTab("feed");
+      addToast("¡GRACIAS POR TU VISITA!", "Tu mensaje quedó guardado permanentemente en el libro de visitas.", "high-intensity");
+      logTelemetryEvent("sintonizacion", `Firma en libro de visitas por ${cleanAuthor}`);
     } catch (err) {
-      addToast("ERROR DE RED", "No se pudo enviar el mensaje al servidor.", "anomaly");
+      addToast("ERROR DE BASE DE DATOS", "No se pudo guardar el mensaje en Firestore.", "anomaly");
+      handleFirestoreError(err, OperationType.CREATE, entryPath);
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Handle Add Comment / Reply to a Guestbook Entry
+  // Handle Add Comment / Reply atomically in Firestore
   const handleAddComment = async (entryId: string) => {
     const text = commentInputs[entryId]?.trim();
     if (!text) return;
 
+    const commentId = sanitizeId(
+      "c_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
+      128
+    );
+    const commentPath = `guestbook_entries/${entryId}/comments/${commentId}`;
+    const entryRef = doc(db, "guestbook_entries", entryId);
+    const commentRef = doc(db, "guestbook_entries", entryId, "comments", commentId);
+    const cleanAuthor = (newAuthor.trim() || "Visitante").slice(0, 60);
+    const cleanContent = text.slice(0, 800);
+
     try {
       setCommentingLoading((prev) => ({ ...prev, [entryId]: true }));
-      const res = await fetch(`/api/opinions/${entryId}/comment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          author: newAuthor || "Visitante",
-          content: text,
-        }),
+      await runTransaction(db, async (tx) => {
+        const entrySnap = await tx.get(entryRef);
+        if (!entrySnap.exists()) {
+          throw new Error("Entrada no encontrada.");
+        }
+        const currentCommentsCount =
+          typeof entrySnap.data().commentsCount === "number" ? entrySnap.data().commentsCount : 0;
+
+        tx.set(commentRef, {
+          author: cleanAuthor,
+          content: cleanContent,
+          createdAt: serverTimestamp(),
+        });
+        tx.update(entryRef, {
+          commentsCount: currentCommentsCount + 1,
+          lastInteractionId: commentId,
+        });
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setEntries((prev) =>
-          prev.map((item) => {
-            if (item.id === entryId) {
-              return {
-                ...item,
-                comments: [...(item.comments || []), data.comment],
-              };
-            }
-            return item;
-          })
-        );
-        setCommentInputs((prev) => ({ ...prev, [entryId]: "" }));
-        addToast("RESPUESTA PUBLICADA", "Tu comentario ha sido agregado al mensaje.", "high-intensity");
-      }
+      setCommentInputs((prev) => ({ ...prev, [entryId]: "" }));
+      addToast("RESPUESTA PUBLICADA", "Tu comentario quedó guardado en el libro de visitas.", "high-intensity");
     } catch (err) {
-      console.warn("Error respondiendo:", err);
+      addToast("AVISO", "No se pudo guardar la respuesta.", "anomaly");
+      handleFirestoreError(err, OperationType.CREATE, commentPath);
     } finally {
       setCommentingLoading((prev) => ({ ...prev, [entryId]: false }));
     }
@@ -384,6 +520,7 @@ export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
                 <input
                   type="text"
                   required
+                  maxLength={60}
                   placeholder="Ej: Sofía, Carlos M., Visitante..."
                   value={newAuthor}
                   onChange={(e) => setNewAuthor(e.target.value)}
@@ -399,6 +536,7 @@ export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
                 </label>
                 <input
                   type="text"
+                  maxLength={80}
                   placeholder="Ej: Buenos Aires, Argentina / Madrid, España..."
                   value={newLocation}
                   onChange={(e) => setNewLocation(e.target.value)}
@@ -439,6 +577,7 @@ export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
               </label>
               <input
                 type="text"
+                maxLength={120}
                 placeholder="Ej: Muy linda página, felicitaciones / Gran experiencia..."
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
@@ -454,6 +593,7 @@ export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
               <textarea
                 required
                 rows={3}
+                maxLength={2000}
                 placeholder="Escribe aquí lo que te pareció el sitio web, cómo descubriste la página, si la recomiendas o qué sensación te dejó..."
                 value={newContent}
                 onChange={(e) => setNewContent(e.target.value)}
@@ -544,16 +684,18 @@ export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
         {loading ? (
           <div className="p-12 text-center text-slate-400 font-mono text-xs flex flex-col items-center justify-center gap-3 bg-slate-900/60 border border-slate-800 rounded-2xl">
             <Radio className="w-8 h-8 animate-spin text-amber-400" />
-            <span>Cargando libro de visitas...</span>
+            <span>Cargando libro de visitas desde la base de datos...</span>
           </div>
         ) : filteredEntries.length === 0 ? (
           <div className="p-10 sm:p-14 text-center bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
             <BookOpen className="w-10 h-10 text-amber-500/60 mx-auto animate-pulse" />
             <h4 className="text-sm font-mono font-bold text-slate-300">
-              No se encontraron mensajes con la búsqueda actual.
+              {searchQuery
+                ? "No se encontraron mensajes con la búsqueda actual."
+                : "El Libro de Visitas en la nueva base de datos está listo para tu firma."}
             </h4>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Sé el primero en firmar nuestro libro de visitas:
+              Sé el primero en dejar tu saludo o experiencia permanente en nuestro libro de visitas:
             </p>
             <button
               type="button"
@@ -569,12 +711,12 @@ export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
           </div>
         ) : (
           filteredEntries.map((item) => {
-            const votedBy = item.votedBy || [];
-            const hasVoted = votedBy.includes(distinctId);
+            const hasVoted = !!votedMap[item.id];
             const isCommentsExpanded = !!expandedComments[item.id];
             const isTextExpanded = !!expandedText[item.id];
             const isLong = item.content.length > 250;
             const rating = item.rating || 5;
+            const itemComments = commentsMap[item.id] || [];
 
             return (
               <article
@@ -708,7 +850,7 @@ export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
                       }`}
                     >
                       <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>{item.comments?.length || 0}</span>
+                      <span>{item.commentsCount || itemComments.length || 0}</span>
                       <span className="text-[10px] hidden xs:inline">Respuestas</span>
                     </button>
                   </div>
@@ -723,17 +865,17 @@ export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
                         <span>Respuestas de visitantes:</span>
                       </h4>
                       <span className="text-[10px] font-mono text-slate-500">
-                        {item.comments?.length || 0} mensajes
+                        {itemComments.length} mensajes
                       </span>
                     </div>
 
                     <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
-                      {!item.comments || item.comments.length === 0 ? (
+                      {itemComments.length === 0 ? (
                         <p className="text-xs font-mono text-slate-500 italic py-1">
                           Aún no hay respuestas a este mensaje. ¡Sé el primero en responder!
                         </p>
                       ) : (
-                        item.comments.map((comm) => (
+                        itemComments.map((comm) => (
                           <div
                             key={comm.id}
                             className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800/90 space-y-1 text-xs"
@@ -762,6 +904,7 @@ export const SuggestionsBlogView: React.FC<SuggestionsBlogViewProps> = ({
                     <div className="flex items-center gap-2 pt-1.5 border-t border-slate-800/80">
                       <input
                         type="text"
+                        maxLength={800}
                         placeholder="Escribe una respuesta a este visitante..."
                         value={commentInputs[item.id] || ""}
                         onChange={(e) =>

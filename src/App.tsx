@@ -44,18 +44,21 @@ import {
   Music,
   Navigation,
   MapPin,
+  Palette,
+  Heart,
 } from "lucide-react";
+import { VISUAL_THEMES, VISUAL_THEME_STORAGE_KEY, VisualThemeId } from "./themes";
 import { DimensionPreset, LogEntry, SignalResponse, TransmitResponse } from "./types";
 import { DIMENSION_PRESETS } from "./presets";
 import {
   getStoredVisits,
   registerUniversalVisit,
-  setUniversalVisits,
   getLocalTelemetryLogs,
   logTelemetryEvent,
   getDeviceInfo,
   TelemetryEvent,
   fetchServerVisits,
+  subscribeToVisitStats,
   isCurrentOperatorExcluded,
   setOperatorExclusionState,
 } from "./cloudCounter";
@@ -64,6 +67,7 @@ import DirectoryList from "./components/DirectoryList";
 import LogTable from "./components/LogTable";
 import TelemetryChart from "./components/TelemetryChart";
 import FundingWidget from "./components/FundingWidget";
+import DimensionalNetworkPanel from "./components/DimensionalNetworkPanel";
 import StarMapVisualizer from "./components/StarMapVisualizer";
 import MembraneStatusPanel from "./components/MembraneStatusPanel";
 import AntennaSelectorModal, { ANTENNA_OPTIONS } from "./components/AntennaSelectorModal";
@@ -263,6 +267,7 @@ export default function App() {
   const [customVisitsInput, setCustomVisitsInput] = useState<string>("");
   const [isTelemetryModalOpen, setIsTelemetryModalOpen] = useState(false);
   const [isSuggestionsModalOpen, setIsSuggestionsModalOpen] = useState(false);
+  const [isFundingModalOpen, setIsFundingModalOpen] = useState(false);
   const [isExcludedOperator, setIsExcludedOperator] = useState<boolean>(() => {
     return isCurrentOperatorExcluded();
   });
@@ -309,6 +314,34 @@ export default function App() {
     }
     return false;
   });
+
+  // Temas Visuales de la Interfaz
+  const [visualTheme, setVisualTheme] = useState<VisualThemeId>(() => {
+    if (typeof window !== "undefined") {
+      const saved = safeStorage.getItem(VISUAL_THEME_STORAGE_KEY);
+      if (saved === "nebulosa-purpura" || saved === "cromo-anunnaki" || saved === "vacio-profundo") {
+        return saved;
+      }
+    }
+    return "vacio-profundo";
+  });
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.setAttribute("data-visual-theme", visualTheme);
+    }
+  }, [visualTheme]);
+
+  const handleChangeVisualTheme = useCallback((nextTheme: VisualThemeId) => {
+    setVisualTheme(nextTheme);
+    safeStorage.setItem(VISUAL_THEME_STORAGE_KEY, nextTheme);
+    const chosen = VISUAL_THEMES.find((t) => t.id === nextTheme);
+    addToast(
+      "TEMA VISUAL ACTUALIZADO",
+      `Paleta cambiada a "${chosen?.name || nextTheme}".`,
+      "high-intensity"
+    );
+  }, []);
 
   const toggleGlitchMode = () => {
     setIsGlitchMode((prev) => {
@@ -1650,7 +1683,7 @@ export default function App() {
 
   // Initialize auth and load local logs on mount
   useEffect(() => {
-    // 1. Inicializar y registrar visita de forma 100% automática en la Nube y Servidor
+    // 1. Inicializar y registrar visita real atómica en Cloud Firestore
     registerUniversalVisit()
       .then((count) => {
         updateVisitsState(count);
@@ -1661,17 +1694,14 @@ export default function App() {
 
     logTelemetryEvent("visita", `Antena sintonizada desde ${getDeviceInfo()}`);
 
-    // Polling periódico cada 8s para sincronizar en tiempo real el contador de visitas con el servidor
-    const visitsInterval = setInterval(async () => {
-      try {
-        const liveCount = await fetchServerVisits();
-        if (typeof liveCount === "number" && liveCount > 0) {
-          updateVisitsState(liveCount);
-        }
-      } catch (e) {}
-    }, 8000);
+    // Suscripción en tiempo real a Firestore para reflejar nuevas visitas al instante
+    const unsubscribeVisits = subscribeToVisitStats((stats) => {
+      if (typeof stats.visits === "number" && stats.visits >= 0) {
+        updateVisitsState(stats.visits);
+      }
+    });
 
-    // Sincronizar de inmediato cuando la ventana o pestaña vuelve al frente (especialmente útil en móviles)
+    // Sincronizar de inmediato cuando la ventana o pestaña vuelve al frente
     const handleFocusSync = () => {
       fetchServerVisits()
         .then((live) => {
@@ -1740,7 +1770,7 @@ export default function App() {
     } catch (e) {}
 
     return () => {
-      clearInterval(visitsInterval);
+      unsubscribeVisits();
       if (typeof window !== "undefined") {
         window.removeEventListener("focus", handleFocusSync);
         document.removeEventListener("visibilitychange", handleFocusSync);
@@ -2635,7 +2665,10 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
   };
 
   return (
-    <div className={`min-h-screen bg-[#070b13] bg-radial-[circle_at_center,rgba(16,24,48,0.4)_0%,#03050a_100%] text-slate-100 font-sans selection:bg-emerald-500/30 selection:text-emerald-300 relative transition-all duration-300 ${isGlitchMode ? "glitch-mode-active" : ""}`}>
+    <div
+      data-visual-theme={visualTheme}
+      className={`min-h-screen app-theme-shell bg-[#070b13] text-slate-100 font-sans selection:bg-emerald-500/30 selection:text-emerald-300 relative transition-all duration-300 ${isGlitchMode ? "glitch-mode-active" : ""}`}
+    >
       
       {/* Canvas de Fondo con Partículas Estelares Flotantes (Sintonización y Transmisión) */}
       <StellarParticlesCanvas
@@ -2645,7 +2678,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
       />
       
       {/* Cabecera / Header principal */}
-      <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
+      <header className="app-theme-header border-b border-slate-900 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="relative">
@@ -3063,6 +3096,8 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
             onOpenBlog={() => setActiveMainTab("blog")}
             visitsCount={visits}
             onOpenTelemetry={() => setIsTelemetryModalOpen(true)}
+            visualTheme={visualTheme}
+            onChangeVisualTheme={handleChangeVisualTheme}
           />
         ) : (
           <>
@@ -5125,6 +5160,78 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         )}
 
         <div className="space-y-6">
+          {/* Selector de Temas Visuales */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-xl backdrop-blur-md space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/40">
+                  <Palette className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-200">
+                    Temas Visuales de la Interfaz
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    Personaliza la paleta cromática y atmósfera de toda la estación
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-emerald-300">
+                Activo: <strong>{VISUAL_THEMES.find((t) => t.id === visualTheme)?.name}</strong>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {VISUAL_THEMES.map((theme) => {
+                const isSelected = visualTheme === theme.id;
+                return (
+                  <button
+                    key={theme.id}
+                    type="button"
+                    onClick={() => handleChangeVisualTheme(theme.id)}
+                    className={`text-left p-4 rounded-xl border transition-all cursor-pointer space-y-2.5 ${
+                      isSelected
+                        ? "bg-slate-950/90 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+                        : "bg-slate-950/60 border-slate-800 hover:border-slate-600"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        {theme.swatches.map((hex, i) => (
+                          <span
+                            key={i}
+                            className="w-4 h-4 rounded-full border border-white/20 shadow-sm"
+                            style={{ backgroundColor: hex }}
+                          />
+                        ))}
+                      </div>
+                      <span
+                        className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded border ${
+                          isSelected
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/60"
+                            : "bg-slate-900 text-slate-400 border-slate-700"
+                        }`}
+                      >
+                        {isSelected ? "Activo" : theme.badgeText}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-100 font-mono">
+                        {theme.name}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono">
+                        {theme.subtitle}
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
+                      {theme.description}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Tarjetas de Optimización: Modo de Bajo Consumo, Modo Inmersión, Modo Glitch & Modo Diagnóstico */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Tarjeta 1: Modo de Bajo Consumo */}
@@ -5277,6 +5384,31 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               </div>
             </div>
           </div>
+
+          {/* Tarjeta discreta: Sostenibilidad y ¿Por qué colaborar? */}
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 shrink-0">
+                <Heart className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-200">
+                  ¿Por qué colaborar con el proyecto?
+                </h3>
+                <p className="text-[11px] text-slate-400 font-sans">
+                  Información transparente sobre el mantenimiento independiente de la estación y opciones de apoyo voluntario.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsFundingModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-rose-500/50 text-slate-200 font-mono text-[11px] font-bold transition-all cursor-pointer shrink-0 flex items-center gap-2 self-start sm:self-auto"
+            >
+              <Heart className="w-3.5 h-3.5 text-rose-400" />
+              <span>Ver detalles y opciones</span>
+            </button>
+          </div>
         </div>
       </div>
     )}
@@ -5300,15 +5432,30 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         )}
       </main>
 
-      {/* Footer global con el Panel de Colaboración y Aporte constante */}
-      <footer className="border-t border-slate-900 bg-slate-950/80 py-8 text-center text-[10px] text-slate-500 font-mono mt-12 space-y-6">
+      {/* Footer global con el Mapa Vivo de Redes Dimensionales e Entidades */}
+      <footer className="app-theme-footer border-t border-slate-900 bg-slate-950/80 py-8 text-center text-[10px] text-slate-500 font-mono mt-12 space-y-6">
         <div className="max-w-7xl mx-auto px-4 space-y-6">
-          {/* Panel de Aporte o Colaboración al Sitio (Siempre visible en el Pie de Página) */}
-          <FundingWidget visitsCount={visits} />
+          {/* Mapa móvil de Redes Dimensionales y selección directa de entidades */}
+          <DimensionalNetworkPanel
+            activePresetId={activePresetId}
+            currentDimension={dimension}
+            onSelectPreset={handleSelectPreset}
+            isLowPowerMode={isLowPowerMode}
+            visualTheme={visualTheme}
+          />
 
-          <div className="border-t border-slate-900/80 pt-4 space-y-1 text-slate-500">
+          <div className="border-t border-slate-900/80 pt-4 space-y-1.5 text-slate-500">
             <p>MODULADOR CUÁNTICO ANTENA INTERDIMENSIONAL — CLOUD COMPILING ACTIVATED</p>
             <p>BITÁCORA LOCAL TRANSDIMENSIONAL — ALMACENAMIENTO SEGURO Y OPERATIVIDAD 100% INDEPENDIENTE</p>
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setIsFundingModalOpen(true)}
+                className="text-[10px] font-mono text-slate-400 hover:text-rose-300 underline decoration-slate-700 hover:decoration-rose-400/60 underline-offset-4 transition-colors cursor-pointer"
+              >
+                ¿Por qué colaborar? · Apoyo voluntario al proyecto
+              </button>
+            </div>
           </div>
         </div>
       </footer>
@@ -5733,6 +5880,43 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                     <option value="Investigador de Frecuencias">Investigador de Frecuencias</option>
                   </select>
                 </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider font-semibold flex items-center gap-1.5">
+                    <Palette className="w-3.5 h-3.5 text-fuchsia-400" />
+                    <span>Temas Visuales:</span>
+                  </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {VISUAL_THEMES.map((theme) => {
+                      const active = visualTheme === theme.id;
+                      return (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          onClick={() => handleChangeVisualTheme(theme.id)}
+                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer space-y-1 ${
+                            active
+                              ? "bg-slate-950 border-emerald-400 text-emerald-300"
+                              : "bg-slate-950/70 border-slate-800 text-slate-300 hover:border-slate-600"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1">
+                            {theme.swatches.map((hex, i) => (
+                              <span
+                                key={i}
+                                className="w-2.5 h-2.5 rounded-full border border-white/20"
+                                style={{ backgroundColor: hex }}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-[10px] font-mono font-bold block leading-tight">
+                            {theme.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -5802,6 +5986,39 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         setMasterPinInput={setMasterPinInput}
         masterPinError={masterPinError}
       />
+
+      {/* MODAL DISCRETO DE COLABORACIÓN Y SOSTENIBILIDAD DEL PROYECTO */}
+      {isFundingModalOpen && (
+        <div
+          className="fixed inset-0 z-[10050] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fade-in"
+          onClick={() => setIsFundingModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-4xl bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800 bg-slate-900/80">
+              <div className="flex items-center gap-2">
+                <Heart className="w-4 h-4 text-rose-400" />
+                <h2 className="text-xs sm:text-sm font-mono font-bold uppercase tracking-wider text-slate-100">
+                  ¿Por qué colaborar con la estación?
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFundingModalOpen(false)}
+                className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-700 cursor-pointer transition-colors"
+                aria-label="Cerrar panel de colaboración"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 sm:p-6 max-h-[82vh] overflow-y-auto">
+              <FundingWidget visitsCount={visits} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

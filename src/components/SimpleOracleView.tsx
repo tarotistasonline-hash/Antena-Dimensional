@@ -20,8 +20,13 @@ import {
   ChevronDown,
   ChevronUp,
   Waves,
+  Copy,
+  Check,
+  ExternalLink,
+  Palette,
 } from "lucide-react";
 import { DimensionPreset, TransmitResponse, SignalResponse } from "../types";
+import { VISUAL_THEMES, VisualThemeId } from "../themes";
 import { TransdimensionalTuningHUD } from "./TransdimensionalTuningHUD";
 
 interface SimpleOracleViewProps {
@@ -65,6 +70,8 @@ interface SimpleOracleViewProps {
   onOpenBlog?: () => void;
   visitsCount?: number;
   onOpenTelemetry?: () => void;
+  visualTheme?: VisualThemeId;
+  onChangeVisualTheme?: (theme: VisualThemeId) => void;
 }
 
 interface SessionContactItem {
@@ -196,8 +203,11 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
   onSwitchToAdvanced,
   visitsCount,
   onOpenTelemetry,
+  visualTheme = "vacio-profundo",
+  onChangeVisualTheme,
 }) => {
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedAnswer, setCopiedAnswer] = useState(false);
 
@@ -400,30 +410,79 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
     setTransmissionMessage(qText);
   };
 
-  const handleShareApp = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: "Receptor Interestelar - Estación de Contacto",
-          text: "Prueba esta estación de radio cuántica: sintoniza distintas civilizaciones y escucha sus mensajes en directo.",
-          url: window.location.href,
-        });
-      } catch (e) {
-        // User cancelled or unsupported
-      }
-    } else {
-      try {
-        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
-          await navigator.clipboard.writeText(window.location.href);
-        }
-        setCopiedLink(true);
-        setTimeout(() => setCopiedLink(false), 2500);
-      } catch (e) {}
+  const getPublicShareUrl = (): string => {
+    if (typeof window === "undefined") {
+      return "https://ais-pre-im2zazu34dyt7etegvdrmm-172786148761.us-east1.run.app/";
     }
+    try {
+      const url = new URL(window.location.href);
+      if (url.hostname.startsWith("ais-dev-")) {
+        url.hostname = url.hostname.replace(/^ais-dev-/, "ais-pre-");
+      }
+      url.searchParams.delete("admin");
+      url.searchParams.delete("exclude");
+      url.searchParams.delete("include");
+      return url.toString();
+    } catch {
+      return window.location.href;
+    }
+  };
+
+  const copyTextToClipboard = async (text: string): Promise<boolean> => {
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      // Fallback to execCommand below
+    }
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleCopyShareLink = async () => {
+    const shareUrl = getPublicShareUrl();
+    const ok = await copyTextToClipboard(shareUrl);
+    if (ok) {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    }
+  };
+
+  const handleNativeShare = async () => {
+    if (!navigator.share) return;
+    try {
+      await navigator.share({
+        title: "Receptor Interestelar - Estación de Contacto",
+        text: "Prueba esta estación de radio cuántica: sintoniza distintas civilizaciones y escucha sus mensajes en directo.",
+        url: getPublicShareUrl(),
+      });
+    } catch {
+      await handleCopyShareLink();
+    }
+  };
+
+  const handleShareApp = async () => {
+    await handleCopyShareLink();
+    setShowShareModal(true);
   };
 
   const handleShareAnswer = async () => {
     if (!transmitResult) return;
+    const shareUrl = getPublicShareUrl();
     const excerpt =
       transmitResult.reaction.length > 260
         ? `${transmitResult.reaction.slice(0, 257)}...`
@@ -437,21 +496,19 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
         await navigator.share({
           title: `Mensaje de ${selectedEntity.title}`,
           text: shareText,
-          url: window.location.href,
+          url: shareUrl,
         });
         return;
-      } catch (e) {
-        // Fallback to clipboard
+      } catch {
+        // Fallback to clipboard below
       }
     }
 
-    try {
-      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
-        await navigator.clipboard.writeText(`${shareText}\n${window.location.href}`);
-      }
+    const ok = await copyTextToClipboard(`${shareText}\n${shareUrl}`);
+    if (ok) {
       setCopiedAnswer(true);
       setTimeout(() => setCopiedAnswer(false), 2500);
-    } catch (e) {}
+    }
   };
 
   const formattedDialFreq =
@@ -1381,6 +1438,33 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {onChangeVisualTheme && (
+            <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-800 rounded-lg px-2 py-1">
+              <Palette className="w-3.5 h-3.5 text-slate-400 mr-0.5 shrink-0" />
+              {VISUAL_THEMES.map((theme) => {
+                const isSelected = visualTheme === theme.id;
+                return (
+                  <button
+                    key={theme.id}
+                    type="button"
+                    onClick={() => onChangeVisualTheme(theme.id)}
+                    title={`Tema visual: ${theme.name}`}
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono transition-all cursor-pointer flex items-center gap-1 ${
+                      isSelected
+                        ? "bg-slate-800 text-white font-bold border border-emerald-400/50"
+                        : "text-slate-400 hover:text-slate-200 border border-transparent"
+                    }`}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full border border-white/30 shrink-0"
+                      style={{ backgroundColor: theme.swatches[2] }}
+                    />
+                    <span className="hidden md:inline">{theme.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {typeof visitsCount === "number" && (
             <button
               type="button"
@@ -1489,6 +1573,115 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL DE COMPARTIR ENLACE */}
+      {showShareModal && (() => {
+        const shareUrl = getPublicShareUrl();
+        const shareMsg = "Prueba esta estación de radio cuántica: sintoniza distintas civilizaciones y escucha sus mensajes en directo.";
+        const whatsappHref = `https://wa.me/?text=${encodeURIComponent(`${shareMsg} ${shareUrl}`)}`;
+        const telegramHref = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareMsg)}`;
+        const xHref = `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareMsg)}`;
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => setShowShareModal(false)}
+          >
+            <div
+              className="bg-slate-900 border border-emerald-500/40 rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Share2 className="w-5 h-5 text-emerald-400" />
+                  <h3 className="font-bold text-white text-base">
+                    Compartir Receptor Interestelar
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowShareModal(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                  aria-label="Cerrar"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                Envía este enlace directo para que otras personas puedan abrir la estación y realizar sus propias consultas:
+              </p>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={shareUrl}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-emerald-300 outline-none select-all"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyShareLink}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shrink-0 cursor-pointer transition-all"
+                >
+                  {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedLink ? "Copiado" : "Copiar"}</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <a
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-600/50 text-emerald-200 text-xs font-bold transition-all"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>WhatsApp</span>
+                </a>
+                <a
+                  href={telegramHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-sky-950/90 hover:bg-sky-900 border border-sky-600/50 text-sky-200 text-xs font-bold transition-all"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Telegram</span>
+                </a>
+                <a
+                  href={xHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600/60 text-slate-200 text-xs font-bold transition-all"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Compartir en X</span>
+                </a>
+                <a
+                  href={shareUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-indigo-950/90 hover:bg-indigo-900 border border-indigo-600/50 text-indigo-200 text-xs font-bold transition-all"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Abrir enlace</span>
+                </a>
+              </div>
+
+              {typeof navigator !== "undefined" && typeof navigator.share === "function" && (
+                <button
+                  type="button"
+                  onClick={handleNativeShare}
+                  className="w-full py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700 text-xs font-semibold cursor-pointer transition-all"
+                >
+                  Usar menú compartir del sistema
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

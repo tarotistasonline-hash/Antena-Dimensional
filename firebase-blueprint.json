@@ -1,0 +1,234 @@
+{
+  "entities": {
+    "SiteStats": {
+      "title": "SiteStats",
+      "description": "Global real visitor counter and verification state.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "description": "Total accumulated real visits including historical baseline."
+        },
+        "realVerifiedCount": {
+          "type": "integer",
+          "description": "Real visits verified directly inside Firestore since database activation."
+        },
+        "lastVisitId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Identifier of the latest VisitEvent written atomically."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": ["count", "realVerifiedCount", "lastVisitId", "updatedAt"]
+    },
+    "VisitEvent": {
+      "title": "VisitEvent",
+      "description": "Privacy-safe record of a single verified visitor session without PII.",
+      "type": "object",
+      "properties": {
+        "device": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Device and browser summary."
+        },
+        "host": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Hostname accessed by the visitor."
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Application path visited."
+        },
+        "sessionHash": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Anonymous session fingerprint token."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the visit."
+        }
+      },
+      "required": ["device", "host", "path", "sessionHash", "createdAt"]
+    },
+    "GuestbookEntry": {
+      "title": "GuestbookEntry",
+      "description": "Public visitor guestbook signature entry.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Short greeting title."
+        },
+        "author": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "Display name or alias of visitor."
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Optional city and country."
+        },
+        "recommend": {
+          "type": "string",
+          "enum": ["Sí, lo recomiendo", "Neutral", "No me gustó"],
+          "description": "Recommendation label."
+        },
+        "rating": {
+          "type": "integer",
+          "description": "Rating from 1 to 5."
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Guestbook message body."
+        },
+        "votesCount": {
+          "type": "integer",
+          "description": "Total number of likes."
+        },
+        "commentsCount": {
+          "type": "integer",
+          "description": "Total number of replies."
+        },
+        "lastInteractionId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Latest atomic vote or comment document ID."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        }
+      },
+      "required": [
+        "title",
+        "author",
+        "location",
+        "recommend",
+        "rating",
+        "content",
+        "votesCount",
+        "commentsCount",
+        "lastInteractionId",
+        "createdAt"
+      ]
+    },
+    "GuestbookComment": {
+      "title": "GuestbookComment",
+      "description": "Reply to a guestbook signature.",
+      "type": "object",
+      "properties": {
+        "author": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "Display name of commenter."
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 800,
+          "description": "Reply body."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of reply."
+        }
+      },
+      "required": ["author", "content", "createdAt"]
+    },
+    "GuestbookVote": {
+      "title": "GuestbookVote",
+      "description": "Like marker subdocument for a guestbook signature.",
+      "type": "object",
+      "properties": {
+        "voterId": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Anonymous client distinct voter identifier."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of vote."
+        }
+      },
+      "required": ["voterId", "createdAt"]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Operator administrator record.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "maxLength": 150,
+          "description": "Verified administrator email."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp."
+        }
+      },
+      "required": ["email", "createdAt"]
+    },
+    "ConnectionTest": {
+      "title": "ConnectionTest",
+      "description": "Connectivity probe document.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "maxLength": 32
+        }
+      },
+      "required": ["status"]
+    }
+  },
+  "firestore": {
+    "/site_stats/{statId}": {
+      "schema": { "$ref": "#/entities/SiteStats" },
+      "description": "Global site visit counters."
+    },
+    "/visit_events/{visitId}": {
+      "schema": { "$ref": "#/entities/VisitEvent" },
+      "description": "Privacy-safe real visitor session log."
+    },
+    "/guestbook_entries/{entryId}": {
+      "schema": { "$ref": "#/entities/GuestbookEntry" },
+      "description": "Public guestbook signatures."
+    },
+    "/guestbook_entries/{entryId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/GuestbookComment" },
+      "description": "Replies under a guestbook signature."
+    },
+    "/guestbook_entries/{entryId}/votes/{voterId}": {
+      "schema": { "$ref": "#/entities/GuestbookVote" },
+      "description": "Likes under a guestbook signature."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Verified operator administrators."
+    },
+    "/test/{docId}": {
+      "schema": { "$ref": "#/entities/ConnectionTest" },
+      "description": "Startup Firestore connection probe."
+    }
+  }
+}

@@ -1,0 +1,231 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default-Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email == 'tarotistasonline@gmail.com' && request.auth.token.email_verified == true)
+      );
+    }
+
+    // 3. Entity Validation Blueprints
+    function isValidSiteStats(data) {
+      return data.keys().hasAll(['count', 'realVerifiedCount', 'lastVisitId', 'updatedAt']) &&
+        data.keys().hasOnly(['count', 'realVerifiedCount', 'lastVisitId', 'updatedAt']) &&
+        data.count is int && data.count >= 0 && data.count <= 100000000 &&
+        data.realVerifiedCount is int && data.realVerifiedCount >= 0 && data.realVerifiedCount <= 100000000 &&
+        isValidId(data.lastVisitId) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidVisitEvent(data) {
+      return data.keys().hasAll(['device', 'host', 'path', 'sessionHash', 'createdAt']) &&
+        data.keys().hasOnly(['device', 'host', 'path', 'sessionHash', 'createdAt']) &&
+        data.device is string && data.device.size() >= 1 && data.device.size() <= 100 &&
+        data.host is string && data.host.size() >= 1 && data.host.size() <= 120 &&
+        data.path is string && data.path.size() >= 1 && data.path.size() <= 120 &&
+        data.sessionHash is string && data.sessionHash.size() >= 1 && data.sessionHash.size() <= 64 &&
+        data.sessionHash.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidGuestbookEntry(data) {
+      return data.keys().hasAll([
+          'title', 'author', 'location', 'recommend', 'rating',
+          'content', 'votesCount', 'commentsCount', 'lastInteractionId', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'author', 'location', 'recommend', 'rating',
+          'content', 'votesCount', 'commentsCount', 'lastInteractionId', 'createdAt'
+        ]) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+        data.author is string && data.author.size() >= 1 && data.author.size() <= 60 &&
+        data.location is string && data.location.size() >= 0 && data.location.size() <= 80 &&
+        data.recommend is string && data.recommend in ['Sí, lo recomiendo', 'Neutral', 'No me gustó'] &&
+        data.rating is int && data.rating >= 1 && data.rating <= 5 &&
+        data.content is string && data.content.size() >= 1 && data.content.size() <= 2000 &&
+        data.votesCount is int && data.votesCount >= 0 && data.votesCount <= 1000000 &&
+        data.commentsCount is int && data.commentsCount >= 0 && data.commentsCount <= 1000000 &&
+        isValidId(data.lastInteractionId) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidGuestbookComment(data) {
+      return data.keys().hasAll(['author', 'content', 'createdAt']) &&
+        data.keys().hasOnly(['author', 'content', 'createdAt']) &&
+        data.author is string && data.author.size() >= 1 && data.author.size() <= 60 &&
+        data.content is string && data.content.size() >= 1 && data.content.size() <= 800 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidGuestbookVote(data) {
+      return data.keys().hasAll(['voterId', 'createdAt']) &&
+        data.keys().hasOnly(['voterId', 'createdAt']) &&
+        data.voterId is string && data.voterId.size() >= 1 && data.voterId.size() <= 64 &&
+        data.voterId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidAdminUser(data) {
+      return data.keys().hasAll(['email', 'createdAt']) &&
+        data.keys().hasOnly(['email', 'createdAt']) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
+        data.createdAt is timestamp;
+    }
+
+    // 4. Collection Match Blocks
+    match /test/{docId} {
+      allow get: if isValidId(docId) && docId == 'connection';
+    }
+
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId) && isAdmin() && isValidAdminUser(incoming()) && incoming().createdAt == request.time;
+      allow update: if isValidId(userId) && isAdmin() && isValidAdminUser(incoming()) && incoming().createdAt == existing().createdAt;
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    match /site_stats/{statId} {
+      allow get: if isValidId(statId) && (statId == 'global' || isAdmin());
+      allow create: if isValidId(statId) && statId == 'global' && isValidSiteStats(incoming()) && incoming().updatedAt == request.time && (
+        isAdmin() || (
+          incoming().count == 303 &&
+          incoming().realVerifiedCount == 0 &&
+          incoming().lastVisitId == 'init_seed'
+        ) || (
+          incoming().count == 304 &&
+          incoming().realVerifiedCount == 1 &&
+          incoming().lastVisitId != 'init_seed' &&
+          !exists(/databases/$(database)/documents/visit_events/$(incoming().lastVisitId)) &&
+          existsAfter(/databases/$(database)/documents/visit_events/$(incoming().lastVisitId))
+        )
+      );
+      allow update: if isValidId(statId) && statId == 'global' && isValidSiteStats(incoming()) && (
+        isAdmin() || (
+          incoming().diff(existing()).affectedKeys().hasOnly(['count', 'realVerifiedCount', 'lastVisitId', 'updatedAt']) &&
+          incoming().count == existing().count + 1 &&
+          incoming().realVerifiedCount == existing().realVerifiedCount + 1 &&
+          incoming().updatedAt == request.time &&
+          incoming().lastVisitId != 'init_seed' &&
+          !exists(/databases/$(database)/documents/visit_events/$(incoming().lastVisitId)) &&
+          existsAfter(/databases/$(database)/documents/visit_events/$(incoming().lastVisitId))
+        )
+      );
+      allow delete: if false;
+    }
+
+    match /visit_events/{visitId} {
+      allow get: if isValidId(visitId) && existing().createdAt is timestamp && existing().host is string;
+      allow list: if isAdmin() || (request.query.limit is int && request.query.limit <= 50);
+      allow create: if isValidId(visitId) && isValidVisitEvent(incoming()) &&
+        incoming().createdAt == request.time &&
+        getAfter(/databases/$(database)/documents/site_stats/global).data.lastVisitId == visitId;
+      allow update, delete: if isValidId(visitId) && isAdmin();
+    }
+
+    match /guestbook_entries/{entryId} {
+      allow get: if isValidId(entryId) && existing().createdAt is timestamp;
+      allow list: if isAdmin() || (request.query.limit is int && request.query.limit <= 50);
+      allow create: if isValidId(entryId) && isValidGuestbookEntry(incoming()) &&
+        incoming().createdAt == request.time && (
+          isAdmin() || (
+            incoming().votesCount == 0 &&
+            incoming().commentsCount == 0 &&
+            incoming().lastInteractionId == 'initial'
+          )
+        );
+      allow update: if isValidId(entryId) && isValidGuestbookEntry(incoming()) && (
+        isAdmin() || (
+          incoming().createdAt == existing().createdAt &&
+          incoming().author == existing().author &&
+          incoming().title == existing().title &&
+          incoming().location == existing().location &&
+          incoming().recommend == existing().recommend &&
+          incoming().rating == existing().rating &&
+          incoming().content == existing().content && (
+            // Action: Add Vote
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly(['votesCount', 'lastInteractionId']) &&
+              incoming().votesCount == existing().votesCount + 1 &&
+              !exists(/databases/$(database)/documents/guestbook_entries/$(entryId)/votes/$(incoming().lastInteractionId)) &&
+              existsAfter(/databases/$(database)/documents/guestbook_entries/$(entryId)/votes/$(incoming().lastInteractionId))
+            ) ||
+            // Action: Remove Vote
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly(['votesCount', 'lastInteractionId']) &&
+              incoming().votesCount == existing().votesCount - 1 &&
+              exists(/databases/$(database)/documents/guestbook_entries/$(entryId)/votes/$(incoming().lastInteractionId)) &&
+              !existsAfter(/databases/$(database)/documents/guestbook_entries/$(entryId)/votes/$(incoming().lastInteractionId))
+            ) ||
+            // Action: Add Comment
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'lastInteractionId']) &&
+              incoming().commentsCount == existing().commentsCount + 1 &&
+              !exists(/databases/$(database)/documents/guestbook_entries/$(entryId)/comments/$(incoming().lastInteractionId)) &&
+              existsAfter(/databases/$(database)/documents/guestbook_entries/$(entryId)/comments/$(incoming().lastInteractionId))
+            )
+          )
+        )
+      );
+      allow delete: if isValidId(entryId) && isAdmin();
+
+      match /comments/{commentId} {
+        allow get: if isValidId(entryId) && isValidId(commentId) &&
+          exists(/databases/$(database)/documents/guestbook_entries/$(entryId)) &&
+          existing().createdAt is timestamp;
+        allow list: if isAdmin() || (request.query.limit is int && request.query.limit <= 100);
+        allow create: if isValidId(entryId) && isValidId(commentId) &&
+          isValidGuestbookComment(incoming()) &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/guestbook_entries/$(entryId)) &&
+          getAfter(/databases/$(database)/documents/guestbook_entries/$(entryId)).data.commentsCount ==
+            get(/databases/$(database)/documents/guestbook_entries/$(entryId)).data.commentsCount + 1 &&
+          getAfter(/databases/$(database)/documents/guestbook_entries/$(entryId)).data.lastInteractionId == commentId;
+        allow update, delete: if isValidId(entryId) && isValidId(commentId) && isAdmin();
+      }
+
+      match /votes/{voterId} {
+        allow get: if isValidId(entryId) && isValidId(voterId) &&
+          exists(/databases/$(database)/documents/guestbook_entries/$(entryId));
+        allow list: if isAdmin() || (request.query.limit is int && request.query.limit <= 50);
+        allow create: if isValidId(entryId) && isValidId(voterId) &&
+          isValidGuestbookVote(incoming()) &&
+          incoming().voterId == voterId &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/guestbook_entries/$(entryId)) &&
+          getAfter(/databases/$(database)/documents/guestbook_entries/$(entryId)).data.votesCount ==
+            get(/databases/$(database)/documents/guestbook_entries/$(entryId)).data.votesCount + 1 &&
+          getAfter(/databases/$(database)/documents/guestbook_entries/$(entryId)).data.lastInteractionId == voterId;
+        allow update: if false;
+        allow delete: if isValidId(entryId) && isValidId(voterId) &&
+          exists(/databases/$(database)/documents/guestbook_entries/$(entryId)) &&
+          getAfter(/databases/$(database)/documents/guestbook_entries/$(entryId)).data.votesCount ==
+            get(/databases/$(database)/documents/guestbook_entries/$(entryId)).data.votesCount - 1 &&
+          getAfter(/databases/$(database)/documents/guestbook_entries/$(entryId)).data.lastInteractionId == voterId;
+      }
+    }
+  }
+}

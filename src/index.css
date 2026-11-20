@@ -308,3 +308,78 @@
   background-color: #e3e3e3;
 }
 
+/* ==========================================================================
+   TEMAS VISUALES DE LA ESTACIÓN (Vacío Profundo, Nebulosa Púrpura, Cromo Anunnaki)
+   ========================================================================== */
+
+:root,
+[data-visual-theme="vacio-profundo"] {
+  --app-shell-bg: radial-gradient(circle at 50% 15%, rgba(16, 24, 48, 0.55) 0%, #070b13 48%, #03050a 100%);
+  --app-header-bg: rgba(2, 6, 23, 0.84);
+  --app-surface-tint: transparent;
+  --app-border-accent: rgba(16, 185, 129, 0.35);
+}
+
+[data-visual-theme="nebulosa-purpura"] {
+  --app-shell-bg: radial-gradient(circle at 20% 15%, rgba(168, 85, 247, 0.24) 0%, rgba(76, 29, 149, 0.22) 38%, #0b0518 78%, #06030f 100%);
+  --app-header-bg: rgba(19, 8, 39, 0.86);
+  --app-surface-tint: rgba(88, 28, 135, 0.14);
+  --app-border-accent: rgba(192, 132, 252, 0.45);
+}
+
+[data-visual-theme="cromo-anunnaki"] {
+  --app-shell-bg: radial-gradient(circle at 80% 12%, rgba(245, 158, 11, 0.18) 0%, rgba(120, 96, 52, 0.14) 36%, #12100d 76%, #0a0907 100%);
+  --app-header-bg: rgba(22, 19, 14, 0.88);
+  --app-surface-tint: rgba(217, 119, 6, 0.1);
+  --app-border-accent: rgba(251, 191, 36, 0.45);
+}
+
+.app-theme-shell {
+  background: var(--app-shell-bg);
+}
+
+.app-theme-header,
+.app-theme-footer {
+  background-color: var(--app-header-bg) !important;
+  border-color: var(--app-border-accent) !important;
+}
+
+[data-visual-theme="nebulosa-purpura"] .bg-slate-900\/90,
+[data-visual-theme="nebulosa-purpura"] .bg-slate-900\/80,
+[data-visual-theme="nebulosa-purpura"] .bg-slate-900 {
+  background-color: rgba(26, 14, 48, 0.88) !important;
+  border-color: rgba(168, 85, 247, 0.32) !important;
+}
+
+[data-visual-theme="nebulosa-purpura"] .bg-slate-950\/90,
+[data-visual-theme="nebulosa-purpura"] .bg-slate-950\/80,
+[data-visual-theme="nebulosa-purpura"] .bg-slate-950\/60,
+[data-visual-theme="nebulosa-purpura"] .bg-slate-950 {
+  background-color: rgba(13, 7, 27, 0.9) !important;
+  border-color: rgba(139, 92, 246, 0.28) !important;
+}
+
+[data-visual-theme="cromo-anunnaki"] .bg-slate-900\/90,
+[data-visual-theme="cromo-anunnaki"] .bg-slate-900\/80,
+[data-visual-theme="cromo-anunnaki"] .bg-slate-900 {
+  background-color: rgba(31, 27, 21, 0.9) !important;
+  border-color: rgba(217, 173, 89, 0.34) !important;
+}
+
+[data-visual-theme="cromo-anunnaki"] .bg-slate-950\/90,
+[data-visual-theme="cromo-anunnaki"] .bg-slate-950\/80,
+[data-visual-theme="cromo-anunnaki"] .bg-slate-950\/60,
+[data-visual-theme="cromo-anunnaki"] .bg-slate-950 {
+  background-color: rgba(18, 16, 12, 0.92) !important;
+  border-color: rgba(180, 148, 86, 0.28) !important;
+}
+
+[data-visual-theme="nebulosa-purpura"] ::selection {
+  background-color: rgba(192, 132, 252, 0.35);
+  color: #f3e8ff;
+}
+
+[data-visual-theme="cromo-anunnaki"] ::selection {
+  background-color: rgba(245, 158, 11, 0.35);
+  color: #fef3c7;
+}
