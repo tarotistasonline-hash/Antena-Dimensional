@@ -11,80 +11,97 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
-const VISITS_FILE = path.join(process.cwd(), "visits-data.json");
-let inMemoryVisitsCount = 0;
+interface ServerVisitLog {
+  id: string;
+  timestamp: string;
+  device: string;
+}
 
-function getVisits(): number {
+interface VisitsData {
+  count: number;
+  updatedAt: string;
+  recentVisits: ServerVisitLog[];
+}
+
+const VISITS_FILE = path.join(process.cwd(), "visits-data.json");
+let inMemoryVisitsData: VisitsData = {
+  count: 303,
+  updatedAt: new Date().toISOString(),
+  recentVisits: [],
+};
+
+function parseDeviceFromUserAgent(ua?: string): string {
+  if (!ua) return "Navegador Web";
+  let device = "Escritorio (PC/Mac)";
+  if (/Android/i.test(ua)) device = "Móvil (Android)";
+  else if (/iPhone|iPad|iPod/i.test(ua)) device = "Móvil (iOS)";
+  else if (/Mobile/i.test(ua)) device = "Dispositivo Móvil";
+
+  let browser = "Navegador";
+  if (/Chrome/i.test(ua) && !/Edg/i.test(ua)) browser = "Chrome";
+  else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browser = "Safari";
+  else if (/Firefox/i.test(ua)) browser = "Firefox";
+  else if (/Edg/i.test(ua)) browser = "Edge";
+
+  return `${device} — ${browser}`;
+}
+
+function readVisitsData(): VisitsData {
   try {
     if (fs.existsSync(VISITS_FILE)) {
-      const data = fs.readFileSync(VISITS_FILE, "utf-8");
-      const parsed = JSON.parse(data);
+      const raw = fs.readFileSync(VISITS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
       if (typeof parsed.count === "number" && !isNaN(parsed.count) && parsed.count >= 0) {
-        inMemoryVisitsCount = Math.max(298, Math.max(inMemoryVisitsCount, parsed.count));
-        return inMemoryVisitsCount;
+        inMemoryVisitsData = {
+          count: Math.floor(parsed.count),
+          updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
+          recentVisits: Array.isArray(parsed.recentVisits) ? parsed.recentVisits.slice(0, 50) : inMemoryVisitsData.recentVisits,
+        };
+        return inMemoryVisitsData;
       }
     }
   } catch (e) {
     console.error("Error reading visits file", e);
   }
-  inMemoryVisitsCount = Math.max(298, inMemoryVisitsCount);
-  return inMemoryVisitsCount;
+  return inMemoryVisitsData;
 }
 
-function incrementVisits(): number {
-  let count = getVisits();
-  count++;
-  inMemoryVisitsCount = count;
+function writeVisitsData(data: VisitsData): void {
+  inMemoryVisitsData = data;
   try {
-    fs.writeFileSync(VISITS_FILE, JSON.stringify({ count, updatedAt: new Date().toISOString() }), "utf-8");
+    fs.writeFileSync(VISITS_FILE, JSON.stringify(data, null, 2), "utf-8");
   } catch (e) {
     console.error("Error writing visits file", e);
   }
-  return count;
 }
 
-function setVisits(count: number): number {
+function incrementVisits(userAgent?: string, customDevice?: string): VisitsData {
+  const current = readVisitsData();
+  const nextCount = current.count + 1;
+  const entry: ServerVisitLog = {
+    id: "v_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
+    timestamp: new Date().toISOString(),
+    device: typeof customDevice === "string" && customDevice.trim() ? customDevice.trim().slice(0, 80) : parseDeviceFromUserAgent(userAgent),
+  };
+  const updated: VisitsData = {
+    count: nextCount,
+    updatedAt: entry.timestamp,
+    recentVisits: [entry, ...current.recentVisits].slice(0, 50),
+  };
+  writeVisitsData(updated);
+  return updated;
+}
+
+function setVisits(count: number): VisitsData {
+  const current = readVisitsData();
   const cleanCount = Math.max(0, Math.floor(count));
-  inMemoryVisitsCount = cleanCount;
-  try {
-    fs.writeFileSync(VISITS_FILE, JSON.stringify({ count: cleanCount, updatedAt: new Date().toISOString() }), "utf-8");
-  } catch (e) {
-    console.error("Error writing visits file", e);
-  }
-  return cleanCount;
-}
-
-// Persistencia de Token de Mixpanel en Servidor
-const DEFAULT_MIXPANEL_TOKEN = "a2abc4490ad62c9fb7713c881bb63b51";
-const MIXPANEL_CONFIG_FILE = path.join(process.cwd(), "mixpanel-config.json");
-
-function getMixpanelTokenServer(): string {
-  try {
-    if (fs.existsSync(MIXPANEL_CONFIG_FILE)) {
-      const data = fs.readFileSync(MIXPANEL_CONFIG_FILE, "utf-8");
-      const parsed = JSON.parse(data);
-      if (parsed && typeof parsed.token === "string" && parsed.token.trim().length > 0) {
-        return parsed.token.trim();
-      }
-    } else {
-      // Auto-crear archivo inicial con el token predeterminado
-      fs.writeFileSync(MIXPANEL_CONFIG_FILE, JSON.stringify({ token: DEFAULT_MIXPANEL_TOKEN, updatedAt: new Date().toISOString() }), "utf-8");
-    }
-  } catch (e) {
-    console.error("Error reading mixpanel config file", e);
-  }
-  const envToken = process.env.VITE_MIXPANEL_TOKEN || process.env.MIXPANEL_TOKEN || "";
-  return envToken.trim() || DEFAULT_MIXPANEL_TOKEN;
-}
-
-function saveMixpanelTokenServer(token: string): string {
-  const cleanToken = token.trim() || DEFAULT_MIXPANEL_TOKEN;
-  try {
-    fs.writeFileSync(MIXPANEL_CONFIG_FILE, JSON.stringify({ token: cleanToken, updatedAt: new Date().toISOString() }), "utf-8");
-  } catch (e) {
-    console.error("Error writing mixpanel config file", e);
-  }
-  return cleanToken;
+  const updated: VisitsData = {
+    count: cleanCount,
+    updatedAt: new Date().toISOString(),
+    recentVisits: current.recentVisits,
+  };
+  writeVisitsData(updated);
+  return updated;
 }
 
 // Initialize Gemini Client only when API key is present
@@ -384,160 +401,40 @@ app.delete("/api/suggestions/:id", (req, res) => {
   res.json({ success: true });
 });
 
+// Contador de Visitas Reales Autónomo
 app.get("/api/visits", (req, res) => {
-  res.json({ success: true, visits: getVisits() });
+  const data = readVisitsData();
+  res.json({
+    success: true,
+    visits: data.count,
+    updatedAt: data.updatedAt,
+    recentVisits: data.recentVisits,
+  });
 });
 
-async function dispatchMixpanelTrackServer(token: string, event: string, properties?: Record<string, any>, distinctId?: string) {
-  const activeToken = token || getMixpanelTokenServer();
-  if (!activeToken || !event) return null;
-
-  const userDistinctId = distinctId || properties?.distinct_id || "op_" + Math.random().toString(36).substring(2, 10);
-
-  const payload = [
-    {
-      event: event,
-      properties: {
-        token: activeToken,
-        distinct_id: userDistinctId,
-        $distinct_id: userDistinctId,
-        time: Math.floor(Date.now() / 1000),
-        $os: "Web",
-        ...properties,
-      },
-    },
-  ];
-
-  try {
-    const controllerUS = new AbortController();
-    const controllerEU = new AbortController();
-    const timerUS = setTimeout(() => controllerUS.abort(), 4000);
-    const timerEU = setTimeout(() => controllerEU.abort(), 4000);
-
-    const [resUS, resEU] = await Promise.allSettled([
-      fetch("https://api.mixpanel.com/track?verbose=1", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: controllerUS.signal,
-      }).then((r) => r.text()),
-      fetch("https://api-eu.mixpanel.com/track?verbose=1", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: controllerEU.signal,
-      }).then((r) => r.text()),
-    ]);
-
-    clearTimeout(timerUS);
-    clearTimeout(timerEU);
-
-    const resultUS = resUS.status === "fulfilled" ? resUS.value : null;
-    const resultEU = resEU.status === "fulfilled" ? resEU.value : null;
-
-    const tokenMasked = activeToken.length > 8 
-      ? `${activeToken.substring(0, 4)}...${activeToken.substring(activeToken.length - 4)}` 
-      : activeToken;
-
-    const isSuccess = (resultUS && resultUS.includes('"status":1')) || (resultEU && resultEU.includes('"status":1'));
-
-    const logEntry: MixpanelLogEntry = {
-      id: Math.random().toString(36).substring(2, 9),
-      timestamp: new Date().toISOString(),
-      event,
-      distinct_id: userDistinctId,
-      token_masked: tokenMasked,
-      us_response: resultUS,
-      eu_response: resultEU,
-      success: !!isSuccess,
-    };
-
-    mixpanelLogs.unshift(logEntry);
-    if (mixpanelLogs.length > 30) {
-      mixpanelLogs.pop();
-    }
-
-    return { resultUS, resultEU, isSuccess, userDistinctId };
-  } catch (err) {
-    console.error("Error in dispatchMixpanelTrackServer:", err);
-    return null;
-  }
-}
-
-app.post("/api/visits/increment", async (req, res) => {
-  const count = incrementVisits();
-  
-  // Transmitir evento a Mixpanel automáticamente desde el backend para garantizar recepción
-  dispatchMixpanelTrackServer(getMixpanelTokenServer(), "Visita Antena", {
-    visitas_totales: count,
-    fuente: "Server Auto-Increment",
-    user_agent: (req.headers["user-agent"] as string) || "desconocido",
-  }).catch(() => {});
-
-  res.json({ success: true, visits: count });
+app.post("/api/visits/increment", (req, res) => {
+  const ua = req.headers["user-agent"] as string | undefined;
+  const customDevice = req.body?.device;
+  const updated = incrementVisits(ua, customDevice);
+  res.json({
+    success: true,
+    visits: updated.count,
+    updatedAt: updated.updatedAt,
+    recentVisits: updated.recentVisits,
+  });
 });
 
 app.post("/api/visits/set", (req, res) => {
   const { count } = req.body;
-  if (typeof count !== "number") {
+  if (typeof count !== "number" || isNaN(count) || count < 0) {
     return res.status(400).json({ error: "Número inválido" });
   }
   const updated = setVisits(count);
-  res.json({ success: true, visits: updated });
-});
-
-// Buffer en memoria para telemetría de Mixpanel en tiempo real
-interface MixpanelLogEntry {
-  id: string;
-  timestamp: string;
-  event: string;
-  distinct_id: string;
-  token_masked: string;
-  us_response: string | null;
-  eu_response: string | null;
-  success: boolean;
-}
-const mixpanelLogs: MixpanelLogEntry[] = [];
-
-app.get("/api/mixpanel/config", (req, res) => {
-  const token = getMixpanelTokenServer();
-  res.json({ token });
-});
-
-app.post("/api/mixpanel/config", (req, res) => {
-  const { token } = req.body;
-  if (typeof token !== "string") {
-    return res.status(400).json({ error: "Token inválido" });
-  }
-  const savedToken = saveMixpanelTokenServer(token);
-  res.json({ success: true, token: savedToken });
-});
-
-app.get("/api/mixpanel/logs", (req, res) => {
-  res.json({ logs: mixpanelLogs });
-});
-
-// Proxy de Telemetría Mixpanel desde el servidor (Bypassea AdBlockers y apoya regiones US/EU)
-app.post("/api/mixpanel/track", async (req, res) => {
-  const { token, event, properties, distinct_id } = req.body;
-  const activeToken = (token && token.trim()) || getMixpanelTokenServer();
-  if (!activeToken || !event) {
-    return res.status(400).json({ status: "error", message: "Token o nombre de evento ausente" });
-  }
-
-  const dispatchResult = await dispatchMixpanelTrackServer(activeToken, event, properties, distinct_id);
-  if (!dispatchResult) {
-    return res.status(500).json({ status: "error", message: "Error enviando evento a Mixpanel" });
-  }
-
-  const latestLog = mixpanelLogs[0] || null;
-
   res.json({
-    status: "success",
-    message: "Evento transmitido a Mixpanel desde servidor",
-    us_response: dispatchResult.resultUS,
-    eu_response: dispatchResult.resultEU,
-    log: latestLog,
+    success: true,
+    visits: updated.count,
+    updatedAt: updated.updatedAt,
+    recentVisits: updated.recentVisits,
   });
 });
 

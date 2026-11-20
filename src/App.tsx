@@ -220,32 +220,29 @@ export default function App() {
   const [customPitchValue, setCustomPitchValue] = useState<number>(0.28);
   const toggleMaleVoiceRef = useRef<boolean>(false);
 
-  // Visitas y Telemetría Mixpanel State (Contador Real Monótono Creciente)
+  // Visitas Reales Autónomas State
   const [visits, setVisits] = useState<number>(() => {
     if (typeof window !== "undefined") {
       try {
         const cached = safeStorage.getItem("antena_cached_visits");
         if (cached) {
           const val = parseInt(cached, 10);
-          if (!isNaN(val) && val > 0) return Math.max(298, val);
+          if (!isNaN(val) && val >= 0) return val;
         }
       } catch (e) {}
     }
-    return 298;
+    return 303;
   });
 
-  // Garantiza que el contador NUNCA baje ni cuente hacia atrás
+  // Sincroniza el contador con el servidor
   const updateVisitsState = useCallback((newCount: number) => {
-    if (typeof newCount !== "number" || isNaN(newCount)) return;
-    setVisits((prev) => {
-      const nextVal = Math.max(prev, newCount);
-      if (typeof window !== "undefined") {
-        try {
-          safeStorage.setItem("antena_cached_visits", String(nextVal));
-        } catch (e) {}
-      }
-      return nextVal;
-    });
+    if (typeof newCount !== "number" || isNaN(newCount) || newCount < 0) return;
+    setVisits(newCount);
+    if (typeof window !== "undefined") {
+      try {
+        safeStorage.setItem("antena_cached_visits", String(newCount));
+      } catch (e) {}
+    }
   }, []);
 
   // Permitir solo ajuste explícito del administrador
@@ -2351,8 +2348,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
 
       setTransmitResult(data);
 
-      // Registrar telemetría con Mixpanel
-      // Registrar telemetría
+      // Registrar telemetría local
       logTelemetryEvent(
         "transmision",
         `Emisión hacia ${dimension} (${freqString}) - Resonancia: ${data.resonance}% - Estado: ${data.sentStatus}`
@@ -2692,7 +2688,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               </>
             )}
 
-            {/* Indicador y Selector de Visitas Reales & Mixpanel */}
+            {/* Indicador de Visitas Reales en Vivo */}
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -2701,19 +2697,19 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                   setIsTelemetryModalOpen(true);
                 }}
                 className="flex items-center gap-2 bg-slate-900/90 hover:bg-slate-850 border border-emerald-500/50 hover:border-emerald-400 rounded-lg py-1.5 px-3 text-xs shadow-md transition-all duration-200 cursor-pointer group"
-                title="Haz clic para ver la Telemetría de Visitas en Vivo, Dispositivos y Actividad"
+                title="Contador de visitas reales en vivo"
               >
                 <div className="flex items-center gap-1.5">
-                  <BarChart3 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <Users className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span className="font-mono text-emerald-300 font-bold text-[11px]">
-                    Visitas: <strong className="text-white bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-700/60">{visits}</strong>
+                    Visitas reales: <strong className="text-white bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-700/60">{visits.toLocaleString()}</strong>
                   </span>
                 </div>
 
                 <div className="hidden md:flex items-center gap-1 text-[9px] font-mono border-l border-slate-800 pl-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   <span className="text-emerald-300 font-bold">
-                    Telemetría Activa
+                    En Vivo
                   </span>
                 </div>
               </button>
@@ -2935,6 +2931,8 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               safeStorage.setItem("antena_ui_mode", "advanced");
             }}
             onOpenBlog={() => setActiveMainTab("blog")}
+            visitsCount={visits}
+            onOpenTelemetry={() => setIsTelemetryModalOpen(true)}
           />
         ) : (
           <>
@@ -5637,20 +5635,19 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         </div>
       )}
 
-      {/* Modal de Telemetría de Visitas Reales & Actividad */}
+      {/* Modal de Contador de Visitas Reales */}
       <TelemetryModal
         isOpen={isTelemetryModalOpen}
         onClose={() => setIsTelemetryModalOpen(false)}
         visits={visits}
-        onVisitsChange={(newVisits) => setVisits(newVisits)}
+        onVisitsChange={(newVisits) => updateVisitsState(newVisits)}
         isExcludedOperator={isExcludedOperator}
         onToggleOperatorExclusion={(nextState) => {
           setIsExcludedOperator(nextState);
-          if (typeof window !== "undefined") {
-            safeStorage.setItem("antena_operator_excluded", String(nextState));
-          }
+          setOperatorExclusionState(nextState);
         }}
         isLowPowerMode={isLowPowerMode}
+        isOperatorAdmin={isOperatorAdmin}
         addToast={addToast}
       />
 

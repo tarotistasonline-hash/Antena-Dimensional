@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Heart, Users, Coffee, Cpu, HelpCircle, ArrowRight, Zap, CheckCircle2 } from "lucide-react";
-import { trackEvent } from "../mixpanel";
+import { logTelemetryEvent } from "../cloudCounter";
 
 interface FundingWidgetProps {
   visitsCount: number;
@@ -24,22 +24,14 @@ export default function FundingWidget({ visitsCount }: FundingWidgetProps) {
     setIsSimulating(true);
     
     // Track initiation in telemetry
-    trackEvent("Inició Simulación de Colaboración", {
-      operador: operatorName || "Anónimo",
-      monto: finalAmount,
-      mensaje: supportMessage,
-    });
+    logTelemetryEvent("transmision", `Inició colaboración (${operatorName || "Anónimo"}: $${finalAmount})`);
 
     setTimeout(() => {
       setIsSimulating(false);
       setSimulatedSuccess(true);
       
       // Track success in telemetry
-      trackEvent("Colaboración Completada", {
-        operador: operatorName || "Anónimo",
-        monto: finalAmount,
-        mensaje: supportMessage,
-      });
+      logTelemetryEvent("transmision", `Colaboración completada ($${finalAmount})`);
 
       // Reset form after a few seconds
       setTimeout(() => {
@@ -51,7 +43,7 @@ export default function FundingWidget({ visitsCount }: FundingWidgetProps) {
   };
 
   const handleExternalClick = (platform: string) => {
-    trackEvent("Clic Enlace Donación Real", { plataforma: platform });
+    logTelemetryEvent("visita", `Clic en enlace externo: ${platform}`);
   };
 
   return (

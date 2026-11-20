@@ -20,7 +20,8 @@ import {
   Clock,
   AlertTriangle,
   Zap,
-  Sliders
+  Sliders,
+  Users
 } from "lucide-react";
 import { DimensionPreset, TransmitResponse, SignalResponse } from "../types";
 import { TransdimensionalTuningHUD } from "./TransdimensionalTuningHUD";
@@ -60,6 +61,8 @@ interface SimpleOracleViewProps {
   onStopVoiceRecording: () => void;
   onSwitchToAdvanced: () => void;
   onOpenBlog?: () => void;
+  visitsCount?: number;
+  onOpenTelemetry?: () => void;
 }
 
 const FRIENDLY_ENTITIES = [
@@ -162,6 +165,8 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
   onStopVoiceRecording,
   onSwitchToAdvanced,
   onOpenBlog,
+  visitsCount,
+  onOpenTelemetry,
 }) => {
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -957,6 +962,18 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {typeof visitsCount === "number" && (
+            <button
+              type="button"
+              onClick={onOpenTelemetry}
+              className="px-3 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900/70 text-emerald-300 border border-emerald-500/40 font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              title="Contador de visitas reales en vivo"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              <Users className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Visitas reales: <strong className="text-white">{visitsCount.toLocaleString()}</strong></span>
+            </button>
+          )}
           {onOpenBlog && (
             <button
               type="button"

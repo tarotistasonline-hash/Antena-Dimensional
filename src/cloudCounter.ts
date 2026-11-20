@@ -1,6 +1,6 @@
 /**
- * Telemetría y Contador Universal Autónomo
- * Registra visitas reales y eventos sin depender de Mixpanel ni servicios de pago.
+ * Contador de Visitas Reales y Telemetría Autónomo
+ * Registra visitas reales persistentes en el servidor sin dependencias ni cuentas externas.
  */
 
 import { safeStorage, safeSessionStorage } from "./utils/storage";
@@ -18,6 +18,8 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutM
 const STORAGE_VISITS_KEY = "antena_universal_visits_count";
 const STORAGE_EVENTS_KEY = "antena_telemetry_events_log";
 const LAST_INCREMENT_TIME_KEY = "antena_last_increment_time_epoch";
+const SESSION_COUNTED_KEY = "antena_visit_session_counted";
+const VISIT_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutos para evitar inflar con recargas rápidas
 
 export interface TelemetryEvent {
   id: string;
@@ -25,6 +27,18 @@ export interface TelemetryEvent {
   type: "visita" | "sintonizacion" | "consulta" | "grabacion" | "transmision";
   details: string;
   device: string;
+}
+
+export interface ServerVisitLog {
+  id: string;
+  timestamp: string;
+  device: string;
+}
+
+export interface ServerVisitStats {
+  visits: number;
+  updatedAt?: string;
+  recentVisits: ServerVisitLog[];
 }
 
 // Obtener info básica del dispositivo del visitante
@@ -45,7 +59,7 @@ export const getDeviceInfo = (): string => {
   return `${device} — ${browser}`;
 };
 
-// Obtener lista de eventos de telemetría guardados
+// Obtener lista de eventos de telemetría guardados localmente
 export const getLocalTelemetryLogs = (): TelemetryEvent[] => {
   if (typeof window === "undefined") return [];
   try {
@@ -55,7 +69,7 @@ export const getLocalTelemetryLogs = (): TelemetryEvent[] => {
   return [];
 };
 
-// Registrar un nuevo evento de telemetría
+// Registrar un nuevo evento de telemetría local
 export const logTelemetryEvent = (
   type: TelemetryEvent["type"],
   details: string
@@ -76,7 +90,7 @@ export const logTelemetryEvent = (
       details,
       device: getDeviceInfo(),
     };
-    const updated = [newEvent, ...current].slice(0, 50); // Guardar los últimos 50 eventos
+    const updated = [newEvent, ...current].slice(0, 50);
     safeStorage.setItem(STORAGE_EVENTS_KEY, JSON.stringify(updated));
     return updated;
   } catch (e) {
@@ -86,20 +100,20 @@ export const logTelemetryEvent = (
 
 // Obtener conteo guardado en caché local
 export const getStoredVisits = (): number => {
-  if (typeof window === "undefined") return 298;
+  if (typeof window === "undefined") return 303;
   try {
     const val = safeStorage.getItem(STORAGE_VISITS_KEY);
     if (val) {
       const parsed = parseInt(val, 10);
-      if (!isNaN(parsed) && parsed > 0) return Math.max(298, parsed);
+      if (!isNaN(parsed) && parsed >= 0) return parsed;
     }
   } catch (e) {}
-  return 298;
+  return 303;
 };
 
 // Guardar conteo en caché local
 export const saveStoredVisits = (count: number): number => {
-  const safeVal = Math.max(298, count);
+  const safeVal = Math.max(0, Math.floor(count));
   if (typeof window !== "undefined") {
     try {
       safeStorage.setItem(STORAGE_VISITS_KEY, String(safeVal));
@@ -123,7 +137,6 @@ export const isCurrentOperatorExcluded = (): boolean => {
     }
   } catch (e) {}
 
-  // Por defecto NO excluir a nadie para que las visitas siempre cuenten
   return safeStorage.getItem("antena_operator_excluded") === "true";
 };
 
@@ -139,92 +152,105 @@ export const setOperatorExclusionState = (excluded: boolean): boolean => {
   return excluded;
 };
 
-// Sincroniza y obtiene el conteo real en vivo desde el servidor
-export const fetchServerVisits = async (): Promise<number> => {
+// Obtiene conteo real y registros recientes en vivo desde el servidor
+export const fetchServerVisitStats = async (): Promise<ServerVisitStats> => {
   let count = getStoredVisits();
+  let recentVisits: ServerVisitLog[] = [];
+  let updatedAt: string | undefined;
   try {
     const res = await fetchWithTimeout("/api/visits?t=" + Date.now(), {
       method: "GET",
-      headers: { 
+      headers: {
         "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache"
+        "Pragma": "no-cache",
       },
     }, 6000);
     if (res.ok) {
       const data = await res.json();
       if (data && typeof data.visits === "number") {
-        count = Math.max(count, data.visits);
-        saveStoredVisits(count);
+        count = saveStoredVisits(data.visits);
+      }
+      if (Array.isArray(data?.recentVisits)) {
+        recentVisits = data.recentVisits;
+      }
+      if (typeof data?.updatedAt === "string") {
+        updatedAt = data.updatedAt;
       }
     }
   } catch (e) {
     // Si la red falla, se conserva la copia local
   }
-  return count;
+  return { visits: count, updatedAt, recentVisits };
 };
 
-// Registrar visita (incrementa en el servidor de forma segura)
+// Sincroniza y obtiene el conteo real en vivo desde el servidor
+export const fetchServerVisits = async (): Promise<number> => {
+  const stats = await fetchServerVisitStats();
+  return stats.visits;
+};
+
+// Registrar visita real (1 vez por sesión / ventana de 30 min, o forzada manualmente por el admin)
 export const registerUniversalVisit = async (force: boolean = false): Promise<number> => {
   let count = getStoredVisits();
   const isExcluded = isCurrentOperatorExcluded();
 
-  // Si el operador activó exclusión voluntaria explícita y no es forzada, solo consulta
   if (isExcluded && !force) {
     return fetchServerVisits();
   }
 
-  // Cooldown breve de 2 segundos para evitar rebote de doble clic pero permitir contar en cada recarga
   const now = Date.now();
-  const lastTime = parseInt(safeSessionStorage.getItem(LAST_INCREMENT_TIME_KEY) || "0", 10);
+  const alreadyCountedThisSession = safeSessionStorage.getItem(SESSION_COUNTED_KEY) === "true";
+  const lastTime = parseInt(safeStorage.getItem(LAST_INCREMENT_TIME_KEY) || "0", 10);
+  const cooldownExpired = isNaN(lastTime) || now - lastTime > VISIT_COOLDOWN_MS;
 
-  const shouldIncrement = force || isNaN(lastTime) || now - lastTime > 2000;
+  const shouldIncrement = force || (!alreadyCountedThisSession && cooldownExpired);
 
   if (shouldIncrement) {
-    safeSessionStorage.setItem(LAST_INCREMENT_TIME_KEY, String(now));
+    safeSessionStorage.setItem(SESSION_COUNTED_KEY, "true");
+    safeStorage.setItem(LAST_INCREMENT_TIME_KEY, String(now));
 
-    logTelemetryEvent("visita", `Nueva conexión registrada desde ${getDeviceInfo()}`);
+    const deviceInfo = getDeviceInfo();
+    logTelemetryEvent("visita", `Nueva visita real registrada desde ${deviceInfo}`);
 
     try {
       const res = await fetchWithTimeout("/api/visits/increment", {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          "Cache-Control": "no-cache"
+          "Cache-Control": "no-cache",
         },
+        body: JSON.stringify({ device: deviceInfo }),
       }, 6000);
 
       if (res.ok) {
         const data = await res.json();
         if (data && typeof data.visits === "number") {
-          count = Math.max(count, data.visits);
-          saveStoredVisits(count);
+          count = saveStoredVisits(data.visits);
           return count;
         }
       }
     } catch (e) {
-      // Si el servidor no responde de inmediato, incrementa localmente de forma provisional
       count += 1;
       saveStoredVisits(count);
       return count;
     }
   } else {
-    // Si acaba de incrementar en los últimos 2s, sincroniza el número más reciente
     return fetchServerVisits();
   }
 
   return count;
 };
 
-// Forzar incremento explícito (+1 de prueba o botón directo)
+// Forzar incremento explícito (+1 de prueba o botón directo del administrador)
 export const incrementServerVisit = async (): Promise<number> => {
   return registerUniversalVisit(true);
 };
 
-// Función para reiniciar o cambiar el conteo manualmente
+// Calibrar o establecer el conteo manualmente desde la consola de operador
 export const setUniversalVisits = async (newCount: number): Promise<number> => {
-  const val = Math.max(298, Math.floor(newCount));
+  const val = Math.max(0, Math.floor(newCount));
   saveStoredVisits(val);
-  logTelemetryEvent("visita", `Contador ajustado manualmente a ${val}`);
+  logTelemetryEvent("visita", `Contador calibrado manualmente a ${val}`);
   try {
     const res = await fetchWithTimeout("/api/visits/set", {
       method: "POST",
