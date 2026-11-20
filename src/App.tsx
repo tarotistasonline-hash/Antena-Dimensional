@@ -219,6 +219,11 @@ export default function App() {
   const [forceLowPitch, setForceLowPitch] = useState<boolean>(true);
   const [customPitchValue, setCustomPitchValue] = useState<number>(0.28);
   const toggleMaleVoiceRef = useRef<boolean>(false);
+  const [welcomeVoiceState, setWelcomeVoiceState] = useState<"idle" | "playing" | "needs_gesture" | "done">("idle");
+  const welcomeVoiceResolvedRef = useRef<boolean>(false);
+  const welcomeLastAttemptRef = useRef<number>(0);
+  const welcomePlayRunnerRef = useRef<((fromUserGesture?: boolean) => void) | null>(null);
+  const welcomeCleanupRef = useRef<(() => void) | null>(null);
 
   // Visitas Reales Autónomas State
   const [visits, setVisits] = useState<number>(() => {
@@ -367,7 +372,11 @@ export default function App() {
   const isStoppingVoiceRef = useRef<boolean>(false);
 
   // Detiene completamente cualquier voz o audio TTS en curso (tanto servidor Gemini como voz local del navegador)
-  const stopAllSpeech = () => {
+  const stopAllSpeech = (markWelcomeResolved = true) => {
+    if (markWelcomeResolved) {
+      welcomeVoiceResolvedRef.current = true;
+      setWelcomeVoiceState((prev) => (prev === "playing" || prev === "needs_gesture" ? "done" : prev));
+    }
     setIsSpeaking(false);
     // Incrementar contador de sesión para invalidar peticiones TTS en vuelo
     ttsSessionIdRef.current++;
@@ -788,10 +797,30 @@ export default function App() {
   const speakSolemnMaleVoice = async (
     rawText: string,
     isSpanishAccent = false,
-    isNeutralWelcome = false
+    isNeutralWelcome = false,
+    onPlaybackEvent?: (ev: "started" | "blocked" | "ended") => void
   ) => {
+    if (!isNeutralWelcome) {
+      welcomeVoiceResolvedRef.current = true;
+      setWelcomeVoiceState((prev) => (prev === "playing" || prev === "needs_gesture" ? "done" : prev));
+      try {
+        welcomeCleanupRef.current?.();
+      } catch (e) {}
+    }
+
+    let wasSpeechBusy = false;
+    try {
+      wasSpeechBusy = Boolean(
+        activeAudioNodeRef.current ||
+          activeUtteranceRef.current ||
+          (typeof window !== "undefined" &&
+            window.speechSynthesis &&
+            (window.speechSynthesis.speaking || window.speechSynthesis.pending))
+      );
+    } catch (e) {}
+
     // 1. Detener categóricamente cualquier audio o voz previo antes de iniciar una nueva transmisión
-    stopAllSpeech();
+    stopAllSpeech(false);
 
     // Si el lector de voz estaba desactivado globalmente, activarlo automáticamente al presionar reproducir
     if (!isVoiceReaderEnabled) {
@@ -799,15 +828,17 @@ export default function App() {
     }
 
     // Desbloquear inmediatamente AudioContext en el hilo del evento de usuario para evitar bloqueos del navegador
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioCtx) {
-        const warmCtx = new AudioCtx();
-        if (warmCtx.state === "suspended") {
-          warmCtx.resume().catch(() => {});
+    if (!isNeutralWelcome) {
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const warmCtx = new AudioCtx();
+          if (warmCtx.state === "suspended") {
+            warmCtx.resume().catch(() => {});
+          }
         }
-      }
-    } catch (e) {}
+      } catch (e) {}
+    }
 
     const currentSessionId = ttsSessionIdRef.current;
 
@@ -823,8 +854,10 @@ export default function App() {
       return;
     }
 
-    // Activar zumbido de sintonización para acompañar la generación de la voz
-    radioStatic.start();
+    // Activar zumbido de sintonización para acompañar la generación de la voz (omitido en la guía de bienvenida)
+    if (!isNeutralWelcome) {
+      radioStatic.start();
+    }
 
     // Determinar la variante de voz masculina (Solemne vs Estándar vs Bienvenida Neutro)
     toggleMaleVoiceRef.current = !toggleMaleVoiceRef.current;
@@ -901,10 +934,12 @@ export default function App() {
     }
 
     try {
-      safeCancelSpeech();
+      if (wasSpeechBusy) {
+        safeCancelSpeech();
+      }
 
       let voices = typeof window.speechSynthesis.getVoices === "function" ? window.speechSynthesis.getVoices() : [];
-      if (voices.length === 0 && typeof window.speechSynthesis.addEventListener === "function") {
+      if (voices.length === 0 && !isNeutralWelcome && typeof window.speechSynthesis.addEventListener === "function") {
         // En navegadores Chromium, getVoices() puede demorar unos milisegundos en inicializarse
         await new Promise<void>((resolve) => {
           const timer = setTimeout(() => resolve(), 200);
@@ -1091,9 +1126,15 @@ export default function App() {
           utterance.rate = isSolemn ? 0.80 : 0.88;
         }
 
+        let chunkStarted = false;
+
         utterance.onstart = () => {
+          chunkStarted = true;
           radioStatic.stop();
           setIsSpeaking(true);
+          if (index === 0) {
+            onPlaybackEvent?.("started");
+          }
         };
 
         utterance.onend = () => {
@@ -1109,6 +1150,7 @@ export default function App() {
             } else {
               setIsSpeaking(false);
               radioStatic.stop();
+              onPlaybackEvent?.("ended");
             }
           }
         };
@@ -1119,11 +1161,23 @@ export default function App() {
             activeUtteranceRef.current = null;
           }
           if (currentSessionId === ttsSessionIdRef.current) {
+            const errName = (e && (e as any).error) || "";
+            if (!chunkStarted && index === 0) {
+              setIsSpeaking(false);
+              radioStatic.stop();
+              if (errName !== "canceled" && errName !== "interrupted") {
+                onPlaybackEvent?.("blocked");
+              } else {
+                onPlaybackEvent?.("blocked");
+              }
+              return;
+            }
             if (index + 1 < chunks.length) {
               speakNextChunk(index + 1);
             } else {
               setIsSpeaking(false);
               radioStatic.stop();
+              onPlaybackEvent?.("ended");
             }
           }
         };
@@ -1137,24 +1191,37 @@ export default function App() {
               window.speechSynthesis.speak(utterance);
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          if (!chunkStarted && index === 0) {
+            setIsSpeaking(false);
+            radioStatic.stop();
+            onPlaybackEvent?.("blocked");
+          }
+        }
       };
 
-      // Breve retardo tras cancel() para asegurar la inicialización del hilo de audio en Chrome/Edge
-      setTimeout(() => {
-        if (currentSessionId === ttsSessionIdRef.current && typeof window !== "undefined" && window.speechSynthesis) {
-          try {
-            if (typeof window.speechSynthesis.resume === "function") {
-              window.speechSynthesis.resume();
-            }
-          } catch (e) {}
-          radioStatic.stop();
-          speakNextChunk(0);
-        }
-      }, 50);
+      if (wasSpeechBusy) {
+        // Breve retardo tras cancel() cuando ya había una locución previa para reiniciar el hilo de audio
+        setTimeout(() => {
+          if (currentSessionId === ttsSessionIdRef.current && typeof window !== "undefined" && window.speechSynthesis) {
+            try {
+              if (typeof window.speechSynthesis.resume === "function") {
+                window.speechSynthesis.resume();
+              }
+            } catch (e) {}
+            radioStatic.stop();
+            speakNextChunk(0);
+          }
+        }, 50);
+      } else {
+        // Llamada síncrona para conservar el token de activación del usuario al primer clic/toque
+        radioStatic.stop();
+        speakNextChunk(0);
+      }
     } catch (e) {
       console.warn("[Speech Fallback Error]:", e);
       radioStatic.stop();
+      onPlaybackEvent?.("blocked");
     }
   };
 
@@ -1227,94 +1294,141 @@ export default function App() {
     speakSolemnMaleVoice(sample, false, false);
   };
 
+  // Runner actualizado para iniciar la explicación hablada sin depender de abrir "¿Cómo funciona?"
+  welcomePlayRunnerRef.current = (fromUserGesture = true) => {
+    welcomeLastAttemptRef.current = Date.now();
+    if (fromUserGesture) {
+      welcomeVoiceResolvedRef.current = false;
+    }
+
+    try {
+      speakSolemnMaleVoice(WELCOME_AUDIO_EXPLANATION, false, true, (ev) => {
+        if (ev === "started") {
+          welcomeVoiceResolvedRef.current = true;
+          setWelcomeVoiceState("playing");
+          try {
+            welcomeCleanupRef.current?.();
+          } catch (e) {}
+        } else if (ev === "blocked") {
+          if (!welcomeVoiceResolvedRef.current) {
+            setWelcomeVoiceState("needs_gesture");
+          }
+        } else if (ev === "ended") {
+          welcomeVoiceResolvedRef.current = true;
+          setWelcomeVoiceState("done");
+          try {
+            welcomeCleanupRef.current?.();
+          } catch (e) {}
+        }
+      });
+    } catch (err) {
+      console.warn("[Welcome Voice Error]:", err);
+      if (!welcomeVoiceResolvedRef.current) {
+        setWelcomeVoiceState("needs_gesture");
+      }
+    }
+  };
+
   // Reproducción inmediata de la voz de bienvenida y explicación al abrir la aplicación (voz masculina acento neutro)
   useEffect(() => {
-    let hasTriggered = false;
-
-    const playWelcomeGuide = async () => {
-      if (hasTriggered) return;
-      hasTriggered = true;
-
-      // Desbloquear AudioContext en caso de estar disponible
-      try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          const warmCtx = new AudioCtx();
-          if (warmCtx.state === "suspended") {
-            warmCtx.resume().catch(() => {});
-          }
-        }
-      } catch (e) {}
-
-      try {
-        await speakSolemnMaleVoice(WELCOME_AUDIO_EXPLANATION, false, true);
-      } catch (err) {
-        console.warn("[Welcome Voice Error]:", err);
-      }
-    };
-
-    // 1. Iniciar inmediatamente al abrir la aplicación (0ms)
-    playWelcomeGuide();
-
-    // 2. Si las voces del navegador tardan unos milisegundos en cargarse, reactivar de inmediato al estar listas
-    const handleVoicesReady = () => {
-      let isSpeechActive = false;
-      try {
-        isSpeechActive = Boolean(typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.speaking);
-      } catch (e) {}
-      const isCurrentlySpeaking = isSpeechActive || activeAudioNodeRef.current !== null;
-
-      if (!isCurrentlySpeaking) {
-        hasTriggered = false;
-        playWelcomeGuide();
-      }
-    };
-    try {
-      if (typeof window !== "undefined" && window.speechSynthesis && typeof window.speechSynthesis.addEventListener === "function") {
-        window.speechSynthesis.addEventListener("voiceschanged", handleVoicesReady, { once: true });
-      }
-    } catch (e) {}
-
-    // 3. Si el navegador retiene el audio por la directiva de autoplay,
-    // se reanuda de inmediato con el primer gesto o interacción en la ventana.
-    const handleFirstInteraction = () => {
-      let isSpeechActive = false;
-      try {
-        isSpeechActive = Boolean(typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.speaking);
-      } catch (e) {}
-      const isCurrentlySpeaking = isSpeechActive || activeAudioNodeRef.current !== null;
-
-      if (!isCurrentlySpeaking) {
-        hasTriggered = false;
-        playWelcomeGuide();
-      }
-      cleanup();
-    };
+    let isDisposed = false;
 
     const cleanup = () => {
-      window.removeEventListener("pointerdown", handleFirstInteraction);
-      window.removeEventListener("click", handleFirstInteraction);
-      window.removeEventListener("touchstart", handleFirstInteraction);
-      window.removeEventListener("keydown", handleFirstInteraction);
-      window.removeEventListener("pointermove", handleFirstInteraction);
-      window.removeEventListener("scroll", handleFirstInteraction);
-      window.removeEventListener("focus", handleFirstInteraction);
+      window.removeEventListener("pointerdown", handleFirstInteraction, true);
+      window.removeEventListener("touchstart", handleFirstInteraction, true);
+      window.removeEventListener("keydown", handleFirstInteraction, true);
+      window.removeEventListener("click", handleFirstInteraction, true);
       try {
         if (typeof window !== "undefined" && window.speechSynthesis && typeof window.speechSynthesis.removeEventListener === "function") {
           window.speechSynthesis.removeEventListener("voiceschanged", handleVoicesReady);
         }
       } catch (e) {}
     };
+    welcomeCleanupRef.current = cleanup;
 
-    window.addEventListener("pointerdown", handleFirstInteraction, { passive: true });
-    window.addEventListener("click", handleFirstInteraction, { passive: true });
-    window.addEventListener("touchstart", handleFirstInteraction, { passive: true });
-    window.addEventListener("keydown", handleFirstInteraction, { passive: true });
-    window.addEventListener("pointermove", handleFirstInteraction, { passive: true, once: true });
-    window.addEventListener("scroll", handleFirstInteraction, { passive: true, once: true });
-    window.addEventListener("focus", handleFirstInteraction, { passive: true, once: true });
+    const isSpeechBusyNow = () => {
+      try {
+        return Boolean(
+          activeAudioNodeRef.current ||
+            (typeof window !== "undefined" &&
+              window.speechSynthesis &&
+              (window.speechSynthesis.speaking || window.speechSynthesis.pending))
+        );
+      } catch (e) {
+        return false;
+      }
+    };
+
+    const handleVoicesReady = () => {
+      if (isDisposed || welcomeVoiceResolvedRef.current || isSpeechBusyNow()) return;
+      welcomePlayRunnerRef.current?.(false);
+    };
+
+    const handleFirstInteraction = (e: Event) => {
+      if (isDisposed || welcomeVoiceResolvedRef.current) {
+        cleanup();
+        return;
+      }
+
+      // Si el usuario tocó directamente una acción específica (elegir civilización, silenciar, transmitir o el botón manual de guía),
+      // marcamos el autoplay automático como resuelto para no interrumpir su acción.
+      try {
+        if (e.target instanceof Element && e.target.closest('[data-skip-welcome-autoplay="true"]')) {
+          welcomeVoiceResolvedRef.current = true;
+          setWelcomeVoiceState((prev) => (prev === "needs_gesture" || prev === "idle" ? "done" : prev));
+          cleanup();
+          return;
+        }
+      } catch (err) {}
+
+      // Evitar doble disparo en el mismo toque (pointerdown -> click)
+      if (Date.now() - welcomeLastAttemptRef.current < 450) {
+        return;
+      }
+
+      if (isSpeechBusyNow()) {
+        welcomeVoiceResolvedRef.current = true;
+        cleanup();
+        return;
+      }
+
+      welcomePlayRunnerRef.current?.(true);
+
+      // Verificar poco después si el navegador permitió iniciar la voz; si ya empezó, limpiar listeners
+      setTimeout(() => {
+        if (!isDisposed && welcomeVoiceResolvedRef.current) {
+          cleanup();
+        }
+      }, 400);
+    };
+
+    try {
+      if (typeof window !== "undefined" && window.speechSynthesis && typeof window.speechSynthesis.addEventListener === "function") {
+        window.speechSynthesis.addEventListener("voiceschanged", handleVoicesReady, { once: true });
+      }
+    } catch (e) {}
+
+    // Solo escuchar gestos reales de activación (nunca pointermove/scroll/focus, que bloquean audio y destruyen los listeners)
+    window.addEventListener("pointerdown", handleFirstInteraction, { capture: true, passive: true });
+    window.addEventListener("touchstart", handleFirstInteraction, { capture: true, passive: true });
+    window.addEventListener("keydown", handleFirstInteraction, { capture: true, passive: true });
+    window.addEventListener("click", handleFirstInteraction, { capture: true, passive: true });
+
+    // 1. Intentar reproducir inmediatamente al abrir la aplicación (0ms)
+    welcomePlayRunnerRef.current?.(false);
+
+    // 2. Si el navegador retuvo el audio por política de autoplay (sin disparar onerror),
+    // informar visualmente que un toque inicia la explicación sin tener que abrir "¿Cómo funciona?"
+    const autoplayCheckTimer = setTimeout(() => {
+      if (isDisposed || welcomeVoiceResolvedRef.current) return;
+      if (!isSpeechBusyNow()) {
+        setWelcomeVoiceState("needs_gesture");
+      }
+    }, 400);
 
     return () => {
+      isDisposed = true;
+      clearTimeout(autoplayCheckTimer);
       cleanup();
     };
   }, []);
@@ -1988,6 +2102,11 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
 
   // Cuando el usuario hace click en un preset o botón del Inspector para conectar con una dimensión
   const handleSelectPreset = async (preset: DimensionPreset) => {
+    welcomeVoiceResolvedRef.current = true;
+    setWelcomeVoiceState((prev) => (prev === "playing" || prev === "needs_gesture" ? "done" : prev));
+    try {
+      welcomeCleanupRef.current?.();
+    } catch (e) {}
     setActivePresetId(preset.id);
     setDimension(preset.coordinates);
 
@@ -2286,6 +2405,11 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
   // Transmitir un mensaje
   const handleTransmit = async () => {
     if (isTransmitting || isTransmittingRef.current) return;
+    welcomeVoiceResolvedRef.current = true;
+    setWelcomeVoiceState((prev) => (prev === "playing" || prev === "needs_gesture" ? "done" : prev));
+    try {
+      welcomeCleanupRef.current?.();
+    } catch (e) {}
     isTransmittingRef.current = true;
     setIsTransmitting(true);
 
@@ -2688,7 +2812,8 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               </>
             )}
 
-            {/* Indicador de Visitas Reales en Vivo */}
+            {/* Indicador de Visitas Reales en Vivo (en vista visitante se muestra una sola vez al pie para no duplicar) */}
+            {(isOperatorAdmin && !isSimpleMode) && (
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -2745,6 +2870,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                 </button>
               )}
             </div>
+            )}
 
             {/* Operador Local Button (Solo en Consola Avanzada para Operador Maestro) */}
             {isOperatorAdmin && !isSimpleMode && (
@@ -2876,6 +3002,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
             frequencyUnit={frequencyUnit}
             transmissionMessage={transmissionMessage}
             setTransmissionMessage={setTransmissionMessage}
+            lastTransmittedMessage={lastTransmittedMessage}
             onSelectPreset={handleSelectPreset}
             onTransmit={handleTransmit}
             isTransmitting={isTransmitting}
@@ -2888,10 +3015,13 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
             transmitResult={transmitResult}
             onClearTransmitResult={() => setTransmitResult(null)}
             isSpeakingSolemn={isSpeaking}
+            welcomeVoiceState={welcomeVoiceState}
+            onPlayWelcomeGuide={() => welcomePlayRunnerRef.current?.(true)}
+            onStopWelcomeGuide={() => stopAllSpeech(true)}
             onPlayVoice={(text: string, isSpanishAccent?: boolean, isNeutralWelcome?: boolean) =>
               speakSolemnMaleVoice(text, isSpanishAccent, isNeutralWelcome ?? false)
             }
-            onStopVoice={stopAllSpeech}
+            onStopVoice={() => stopAllSpeech(true)}
             isOperatorAdmin={isOperatorAdmin}
             forceBaritonePitch={forceBaritonePitch}
             onToggleForceBaritonePitch={() => {

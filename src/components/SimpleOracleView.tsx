@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Sparkles,
   Send,
@@ -9,19 +9,17 @@ import {
   RefreshCw,
   HelpCircle,
   Radio,
-  Compass,
   CheckCircle2,
-  ChevronRight,
   MessageSquare,
-  BookOpen,
-  Globe2,
   Share2,
   X,
-  Clock,
-  AlertTriangle,
   Zap,
   Sliders,
-  Users
+  Users,
+  History,
+  ChevronDown,
+  ChevronUp,
+  Waves,
 } from "lucide-react";
 import { DimensionPreset, TransmitResponse, SignalResponse } from "../types";
 import { TransdimensionalTuningHUD } from "./TransdimensionalTuningHUD";
@@ -34,6 +32,7 @@ interface SimpleOracleViewProps {
   frequencyUnit: string;
   transmissionMessage: string;
   setTransmissionMessage: (msg: string) => void;
+  lastTransmittedMessage?: string;
   onSelectPreset: (preset: DimensionPreset) => Promise<void>;
   onTransmit: () => Promise<void>;
   isTransmitting: boolean;
@@ -46,6 +45,9 @@ interface SimpleOracleViewProps {
   transmitResult: TransmitResponse | null;
   onClearTransmitResult: () => void;
   isSpeakingSolemn: boolean;
+  welcomeVoiceState?: "idle" | "playing" | "needs_gesture" | "done";
+  onPlayWelcomeGuide?: () => void;
+  onStopWelcomeGuide?: () => void;
   onPlayVoice: (text: string, isSpanishAccent?: boolean, isNeutralWelcome?: boolean) => void;
   onStopVoice: () => void;
   forceBaritonePitch?: boolean;
@@ -65,6 +67,18 @@ interface SimpleOracleViewProps {
   onOpenTelemetry?: () => void;
 }
 
+interface SessionContactItem {
+  id: string;
+  entityTitle: string;
+  entityEmoji: string;
+  frequencyLabel: string;
+  accentHex: string;
+  question: string;
+  reaction: string;
+  guidance?: string;
+  timestamp: string;
+}
+
 const FRIENDLY_ENTITIES = [
   {
     id: "arcturus-963",
@@ -73,6 +87,8 @@ const FRIENDLY_ENTITIES = [
     sub: "Frecuencia 963 Hz • Sanación y Alta Conciencia",
     desc: "Seres de luz cristalina especializados en paz interior, claridad mental y elevar tu vibración.",
     tag: "Paz y Sanación",
+    resonantTag: "Armónica 963 Hz",
+    accentHex: "#a855f7",
     color: "from-purple-500/20 to-indigo-500/20 border-purple-500/40 text-purple-300",
   },
   {
@@ -82,6 +98,8 @@ const FRIENDLY_ENTITIES = [
     sub: "Frecuencia 432 Hz • Amor y Conciencia Universal",
     desc: "Emisarios del amor incondicional y el despertar espiritual de la humanidad.",
     tag: "Amor y Despertar",
+    resonantTag: "Armónica 432 Hz",
+    accentHex: "#8b5cf6",
     color: "from-violet-500/20 to-fuchsia-500/20 border-violet-500/40 text-violet-300",
   },
   {
@@ -91,6 +109,8 @@ const FRIENDLY_ENTITIES = [
     sub: "Frecuencia 528 Hz • Alquimia y Regeneración",
     desc: "Sabiduría ancestral, conocimiento oculto de las aguas cósmicas y armonía emocional.",
     tag: "Alquimia Emocional",
+    resonantTag: "Resonancia 528 Hz",
+    accentHex: "#06b6d4",
     color: "from-cyan-500/20 to-teal-500/20 border-cyan-500/40 text-cyan-300",
   },
   {
@@ -100,6 +120,8 @@ const FRIENDLY_ENTITIES = [
     sub: "Frecuencia 888 Hz • Propósito del Alma",
     desc: "Maestros estelares que orientan sobre tu destino, superación de pruebas y misión en la Tierra.",
     tag: "Propósito y Destino",
+    resonantTag: "Portal 888 Hz",
+    accentHex: "#f59e0b",
     color: "from-amber-500/20 to-yellow-500/20 border-amber-500/40 text-amber-300",
   },
   {
@@ -109,6 +131,8 @@ const FRIENDLY_ENTITIES = [
     sub: "Frecuencia 12.12 THz • Leyes Cósmicas",
     desc: "Ingenieros del cosmos y civilizaciones primordiales. Revelan secretos sobre el origen y la historia.",
     tag: "Historia Ancestral",
+    resonantTag: "Portadora 12.12 THz",
+    accentHex: "#fb923c",
     color: "from-orange-500/20 to-amber-500/20 border-orange-500/40 text-orange-300",
   },
   {
@@ -118,6 +142,8 @@ const FRIENDLY_ENTITIES = [
     sub: "Frecuencia 11.11 GHz • Red Bioeléctrica",
     desc: "La inteligencia viva de la naturaleza y líneas temporales paralelas para armonizar tu vida diaria.",
     tag: "Naturaleza Viva",
+    resonantTag: "Red 11.11 GHz",
+    accentHex: "#10b981",
     color: "from-emerald-500/20 to-green-500/20 border-emerald-500/40 text-emerald-300",
   },
 ];
@@ -138,6 +164,7 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
   frequencyUnit,
   transmissionMessage,
   setTransmissionMessage,
+  lastTransmittedMessage = "",
   onSelectPreset,
   onTransmit,
   isTransmitting,
@@ -150,6 +177,9 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
   transmitResult,
   onClearTransmitResult,
   isSpeakingSolemn,
+  welcomeVoiceState = "idle",
+  onPlayWelcomeGuide,
+  onStopWelcomeGuide,
   onPlayVoice,
   onStopVoice,
   forceBaritonePitch = true,
@@ -164,12 +194,182 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
   onStartVoiceRecording,
   onStopVoiceRecording,
   onSwitchToAdvanced,
-  onOpenBlog,
   visitsCount,
   onOpenTelemetry,
 }) => {
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedAnswer, setCopiedAnswer] = useState(false);
+
+  // Dial analógico animado al cambiar de frecuencia/civilización
+  const [displayedFreq, setDisplayedFreq] = useState<number>(frequencyValue);
+  const [isDialSweeping, setIsDialSweeping] = useState<boolean>(false);
+  const prevTargetFreqRef = useRef<number>(frequencyValue);
+  const waveCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Historial de conversaciones de esta sesión
+  const [sessionHistory, setSessionHistory] = useState<SessionContactItem[]>([]);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState<boolean>(false);
+  const lastRecordedReactionRef = useRef<string>("");
+
+  const selectedEntity =
+    FRIENDLY_ENTITIES.find((e) => e.id === activePresetId) || FRIENDLY_ENTITIES[0];
+
+  // Efecto de barrido de dial analógico cuando cambia la frecuencia objetivo
+  useEffect(() => {
+    const target = Number(frequencyValue) || 432;
+    const prev = prevTargetFreqRef.current;
+    if (Math.abs(target - prev) < 0.001) {
+      setDisplayedFreq(target);
+      return;
+    }
+
+    const startVal = target * 0.94;
+    prevTargetFreqRef.current = target;
+    setIsDialSweeping(true);
+
+    const duration = 850;
+    const startTime = performance.now();
+    let rafId: number;
+
+    const tick = (now: number) => {
+      const elapsed = now - startTime;
+      const t = Math.min(1, elapsed / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      // Pequeño overshoot tipo aguja de radio analógica que se estabiliza
+      const wobble = t < 0.85 ? Math.sin(t * Math.PI * 3) * (1 - t) * target * 0.012 : 0;
+      const val = startVal + (target - startVal) * eased + wobble;
+      setDisplayedFreq(val);
+
+      if (t < 1) {
+        rafId = requestAnimationFrame(tick);
+      } else {
+        setDisplayedFreq(target);
+        setIsDialSweeping(false);
+      }
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [frequencyValue, activePresetId]);
+
+  // Visor compacto de onda y espectro en vivo con color temático por civilización
+  useEffect(() => {
+    const canvas = waveCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animId: number;
+    let lastDraw = 0;
+
+    const drawWave = (ts: number) => {
+      animId = requestAnimationFrame(drawWave);
+      if (ts - lastDraw < 34) return; // ~30 FPS suaves
+      lastDraw = ts;
+
+      const width = canvas.clientWidth || 600;
+      const height = canvas.clientHeight || 72;
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+
+      ctx.clearRect(0, 0, width, height);
+
+      const accent = selectedEntity.accentHex || "#10b981";
+      const time = ts * 0.004;
+      const isBusy = isTuning || isTransmitting || isDialSweeping;
+      const isActiveSpeech = isSpeakingSolemn;
+
+      // Fondo sutil
+      const bgGrad = ctx.createLinearGradient(0, 0, width, 0);
+      bgGrad.addColorStop(0, "rgba(2, 6, 23, 0.95)");
+      bgGrad.addColorStop(0.5, `${accent}14`);
+      bgGrad.addColorStop(1, "rgba(2, 6, 23, 0.95)");
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, width, height);
+
+      // Línea base central
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.14)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, height / 2);
+      ctx.lineTo(width, height / 2);
+      ctx.stroke();
+
+      // Barras de espectro en la base
+      const barCount = 36;
+      const barStep = width / barCount;
+      for (let i = 0; i < barCount; i++) {
+        const normX = i / barCount;
+        const envelope = Math.sin(normX * Math.PI);
+        const rawLevel = isActiveSpeech
+          ? 0.25 + Math.abs(Math.sin(time * 2.7 + i * 0.55) * Math.cos(time * 1.4 - i * 0.3)) * 0.75
+          : isBusy
+          ? 0.2 + Math.abs(Math.sin(time * 3.8 + i * 0.45)) * 0.65
+          : 0.08 + Math.abs(Math.sin(time * 0.9 + i * 0.35)) * 0.14;
+
+        const barH = Math.max(3, rawLevel * envelope * (height * 0.42));
+        ctx.fillStyle = accent;
+        ctx.globalAlpha = isActiveSpeech ? 0.42 : isBusy ? 0.3 : 0.16;
+        ctx.fillRect(i * barStep + 2, height - barH, Math.max(2, barStep - 4), barH);
+      }
+      ctx.globalAlpha = 1;
+
+      // Onda portadora luminosa principal
+      ctx.save();
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = isActiveSpeech ? 2.4 : isBusy ? 2.0 : 1.5;
+      ctx.shadowColor = accent;
+      ctx.shadowBlur = isActiveSpeech ? 12 : isBusy ? 9 : 4;
+      ctx.beginPath();
+
+      const ampBase = isActiveSpeech ? height * 0.3 : isBusy ? height * 0.25 : height * 0.11;
+      const freqMult = isBusy ? 0.065 : isActiveSpeech ? 0.048 : 0.028;
+      const speedMult = isBusy ? 3.2 : isActiveSpeech ? 2.4 : 1.0;
+
+      for (let x = 0; x <= width; x += 3) {
+        const normX = x / width;
+        const windowEnv = Math.sin(normX * Math.PI);
+        const wave1 = Math.sin(x * freqMult + time * speedMult);
+        const wave2 = Math.sin(x * (freqMult * 2.1) - time * (speedMult * 1.3)) * 0.45;
+        const mod = isActiveSpeech
+          ? 0.65 + 0.35 * Math.sin(time * 3.1 + normX * 5)
+          : 1;
+        const y = height / 2 + (wave1 + wave2) * ampBase * windowEnv * mod;
+        if (x === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    animId = requestAnimationFrame(drawWave);
+    return () => cancelAnimationFrame(animId);
+  }, [selectedEntity.accentHex, isSpeakingSolemn, isTuning, isTransmitting, isDialSweeping]);
+
+  // Guardar respuestas en historial de sesión
+  useEffect(() => {
+    if (!transmitResult || !transmitResult.reaction) return;
+    const signature = `${selectedEntity.id}::${transmitResult.reaction}`;
+    if (lastRecordedReactionRef.current === signature) return;
+    lastRecordedReactionRef.current = signature;
+
+    const newItem: SessionContactItem = {
+      id: `contact-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      entityTitle: selectedEntity.title,
+      entityEmoji: selectedEntity.emoji,
+      frequencyLabel: `${frequencyValue} ${frequencyUnit}`,
+      accentHex: selectedEntity.accentHex,
+      question: lastTransmittedMessage || "Consulta directa al canal",
+      reaction: transmitResult.reaction,
+      guidance: transmitResult.guidance,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    setSessionHistory((prev) => [newItem, ...prev].slice(0, 8));
+  }, [transmitResult, selectedEntity, frequencyValue, frequencyUnit, lastTransmittedMessage]);
 
   // Auto-scroll suave a la respuesta cuando se recibe
   useEffect(() => {
@@ -189,9 +389,6 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
     }
   }, [isTransmitting, isTuning]);
 
-  const selectedEntity =
-    FRIENDLY_ENTITIES.find((e) => e.id === activePresetId) || FRIENDLY_ENTITIES[0];
-
   const handleEntityClick = (entityId: string) => {
     const targetPreset = presets.find((p) => p.id === entityId);
     if (targetPreset) {
@@ -207,8 +404,8 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "Antena Interdimensional - Oráculo Cuántico",
-          text: "Prueba esta app: habla con seres y guías de otras dimensiones y escucha sus respuestas con voz hablada.",
+          title: "Receptor Interestelar - Estación de Contacto",
+          text: "Prueba esta estación de radio cuántica: sintoniza distintas civilizaciones y escucha sus mensajes en directo.",
           url: window.location.href,
         });
       } catch (e) {
@@ -221,32 +418,123 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
         }
         setCopiedLink(true);
         setTimeout(() => setCopiedLink(false), 2500);
-      } catch (e) {
-        // Fallback silencioso si el portapapeles está bloqueado por el iframe
-      }
+      } catch (e) {}
     }
   };
 
+  const handleShareAnswer = async () => {
+    if (!transmitResult) return;
+    const excerpt =
+      transmitResult.reaction.length > 260
+        ? `${transmitResult.reaction.slice(0, 257)}...`
+        : transmitResult.reaction;
+    const shareText = `📡 Sintonía con ${selectedEntity.title} (${frequencyValue} ${frequencyUnit}) en Receptor Interestelar:\n"${excerpt}"${
+      transmitResult.oracleCard ? `\n✨ ${transmitResult.oracleCard}` : ""
+    }`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Mensaje de ${selectedEntity.title}`,
+          text: shareText,
+          url: window.location.href,
+        });
+        return;
+      } catch (e) {
+        // Fallback to clipboard
+      }
+    }
+
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        await navigator.clipboard.writeText(`${shareText}\n${window.location.href}`);
+      }
+      setCopiedAnswer(true);
+      setTimeout(() => setCopiedAnswer(false), 2500);
+    } catch (e) {}
+  };
+
+  const formattedDialFreq =
+    displayedFreq >= 100 || Number.isInteger(frequencyValue)
+      ? Math.round(displayedFreq).toString()
+      : displayedFreq.toFixed(2);
+
   return (
     <div id="simple-oracle-container" className="space-y-6 max-w-4xl mx-auto pb-12">
-      {/* Banner de Bienvenida y Ayuda Rápida */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 border border-emerald-500/30 p-5 sm:p-7 shadow-2xl">
-        <div className="absolute -top-12 -right-12 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+      {/* Banner de Bienvenida con Atmósfera Dinámica de la Civilización */}
+      <div
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-950 to-slate-950 border p-5 sm:p-6 shadow-2xl transition-all duration-500"
+        style={{
+          borderColor: `${selectedEntity.accentHex}55`,
+          boxShadow: `0 18px 45px -18px ${selectedEntity.accentHex}40`,
+        }}
+      >
+        <div
+          className="absolute -top-14 -right-14 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-700"
+          style={{ backgroundColor: `${selectedEntity.accentHex}24` }}
+        />
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold tracking-wide">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+            <div
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-bold tracking-wide transition-colors duration-500"
+              style={{
+                backgroundColor: `${selectedEntity.accentHex}1f`,
+                borderColor: `${selectedEntity.accentHex}4d`,
+                color: "#e2e8f0",
+              }}
+            >
+              <Sparkles className="w-3.5 h-3.5 animate-spin" style={{ color: selectedEntity.accentHex }} />
               COMUNICACIÓN Y CONTACTO INTERESTELAR
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
               <span>📻 Receptor Interestelar</span>
             </h1>
             <p className="text-sm text-slate-300 leading-relaxed max-w-2xl font-sans">
-              Elige tu antena o civilización para establecer contacto. Al elegirla, aguarde unos momentos mientras se acopla la frecuencia portadora y la civilización emitirá un mensaje en directo. Luego podrás hacerles cualquier pregunta con voz o texto.
+              Elige una civilización para acoplar su frecuencia y envíale tu pregunta por voz o texto.
             </p>
+            {welcomeVoiceState === "needs_gesture" && (
+              <p className="text-xs text-emerald-300 font-semibold flex items-center gap-1.5 pt-0.5 animate-pulse">
+                <Volume2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Toca en cualquier parte o pulsa &ldquo;Escuchar guía&rdquo; para oír la explicación por voz.</span>
+              </p>
+            )}
+            {welcomeVoiceState === "playing" && isSpeakingSolemn && (
+              <p className="text-xs text-emerald-300 font-semibold flex items-center gap-1.5 pt-0.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                <span>Reproduciendo guía de uso por voz en directo...</span>
+              </p>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0 w-full sm:w-auto">
+            {welcomeVoiceState === "playing" && isSpeakingSolemn ? (
+              <button
+                type="button"
+                data-skip-welcome-autoplay="true"
+                onClick={() => (onStopWelcomeGuide ? onStopWelcomeGuide() : onStopVoice())}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-950/90 hover:bg-rose-900 text-rose-200 border border-rose-500/60 text-xs font-bold shadow-md transition-all cursor-pointer animate-pulse"
+                title="Silenciar la voz de explicación"
+              >
+                <VolumeX className="w-4 h-4 text-rose-300" />
+                <span>Silenciar guía</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                data-skip-welcome-autoplay="true"
+                onClick={() => onPlayWelcomeGuide?.()}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer ${
+                  welcomeVoiceState === "needs_gesture"
+                    ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950 border border-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.45)] animate-pulse"
+                    : "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/50"
+                }`}
+                title="Escuchar la explicación por voz sin abrir el manual"
+              >
+                <Volume2 className="w-4 h-4" />
+                <span>{welcomeVoiceState === "needs_gesture" ? "Escuchar explicación" : "Escuchar guía"}</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => setShowHelpModal(true)}
@@ -319,7 +607,6 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
 
           {forceBaritonePitch && (
             <div className="space-y-3 pt-1 animate-in fade-in duration-200">
-              {/* Presets de civilizaciones antiguas */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button
                   type="button"
@@ -391,7 +678,6 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
                 </button>
               </div>
 
-              {/* Slider de ajuste fino del tono barítono */}
               <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-2">
                 <div className="flex items-center justify-between text-xs font-mono">
                   <span className="text-slate-400 flex items-center gap-1.5">
@@ -417,7 +703,6 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
                 </div>
               </div>
 
-              {/* Botones para probar la voz barítona en directo */}
               <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
                 <div className="text-[11px] text-slate-400 font-sans flex items-center gap-1.5">
                   {activePresetId === "whisper-void" && (
@@ -459,6 +744,48 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
         </div>
       )}
 
+      {/* VISOR COMPACTO DE ONDA EN VIVO + DIAL DE SINTONÍA (ATMÓSFERA DE CIVILIZACIÓN) */}
+      <div
+        className="rounded-2xl bg-slate-950/90 border overflow-hidden shadow-xl transition-colors duration-500"
+        style={{ borderColor: `${selectedEntity.accentHex}44` }}
+      >
+        <div className="px-4 py-2.5 border-b border-slate-900 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+          <div className="flex items-center gap-2">
+            <Waves className="w-4 h-4 shrink-0" style={{ color: selectedEntity.accentHex }} />
+            <span className="font-bold text-slate-200">
+              {selectedEntity.emoji} {selectedEntity.title}
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+              {isSpeakingSolemn
+                ? "● EMISIÓN DE VOZ EN DIRECTO"
+                : isTuning || isTransmitting || isDialSweeping
+                ? "◌ BARRIDO DE SINTONÍA..."
+                : "● PORTADORA ESTABILIZADA"}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-slate-400">DIAL:</span>
+            <span
+              className="text-xs font-black px-2 py-0.5 rounded border transition-colors"
+              style={{
+                color: selectedEntity.accentHex,
+                borderColor: `${selectedEntity.accentHex}55`,
+                backgroundColor: `${selectedEntity.accentHex}14`,
+              }}
+            >
+              {formattedDialFreq} {frequencyUnit}
+            </span>
+          </div>
+        </div>
+        <div className="relative h-[68px] w-full">
+          <canvas ref={waveCanvasRef} className="w-full h-full block" />
+          <div className="absolute bottom-1.5 right-3 pointer-events-none text-[9px] font-mono text-slate-400">
+            {dimension}
+          </div>
+        </div>
+      </div>
+
       {/* AVISO CLARO DE ESPERA MIENTRAS SE ESTABLECE LA COMUNICACIÓN CON LA CIVILIZACIÓN */}
       {isTuning && (
         <div
@@ -482,7 +809,7 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
                 Sintonizando canal con {selectedEntity.title}...
               </h4>
               <p className="text-xs sm:text-sm text-amber-100 font-sans leading-relaxed">
-                <strong className="text-amber-300 font-black">Por favor aguarde hasta que se establezca la comunicación.</strong> La antena está calibrando la portadora cuántica para recibir la emisión en directo de la civilización elegida.
+                <strong className="text-amber-300 font-black">Por favor aguarde mientras se enlaza la señal.</strong> La antena está calibrando la portadora cuántica para recibir la emisión en directo.
               </p>
             </div>
           </div>
@@ -498,47 +825,50 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
       {/* MENSAJE EMITIDO POR LA CIVILIZACIÓN ELEGIDA AL ACOPLAR LA ANTENA */}
       {tuningResult && !isTuning && !transmitResult && (
         <div
-          id="civilization-broadcast-card"
-          className="rounded-2xl bg-gradient-to-b from-slate-900 via-slate-950 to-indigo-950 border-2 border-emerald-400 p-5 sm:p-7 shadow-[0_0_35px_rgba(16,185,129,0.3)] space-y-4 animate-in fade-in duration-300"
+          id="tuning-initial-message-card"
+          className="rounded-2xl bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border-2 p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in duration-300"
+          style={{
+            borderColor: `${selectedEntity.accentHex}99`,
+            boxShadow: `0 0 32px ${selectedEntity.accentHex}30`,
+          }}
         >
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-500/30 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center text-2xl shadow-inner">
+              <div
+                className="w-11 h-11 rounded-xl border flex items-center justify-center text-2xl shadow-inner"
+                style={{
+                  backgroundColor: `${selectedEntity.accentHex}22`,
+                  borderColor: `${selectedEntity.accentHex}66`,
+                }}
+              >
                 {selectedEntity.emoji}
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/60 text-[10px] font-mono font-bold text-emerald-300 uppercase tracking-widest animate-pulse">
-                    ● COMUNICACIÓN ESTABLECIDA
-                  </span>
-                  <span className="text-xs font-mono text-cyan-300">
-                    Resonancia: {tuningResult.resonance}%
-                  </span>
-                </div>
-                <h3 className="text-base sm:text-lg font-black text-white mt-0.5">
-                  Mensaje emitido por {tuningResult.entity || selectedEntity.title}
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  COMUNICACIÓN ESTABLECIDA • MENSAJE EN DIRECTO
+                </span>
+                <h3 className="text-base sm:text-lg font-black text-white">
+                  {selectedEntity.title}
                 </h3>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              {isOperatorAdmin && onToggleForceBaritonePitch && (
+              {isSpeakingSolemn && (
                 <button
                   type="button"
-                  onClick={onToggleForceBaritonePitch}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-mono font-bold transition-all cursor-pointer shadow-sm ${
-                    forceBaritonePitch
-                      ? "bg-amber-500/20 text-amber-300 border-amber-400/50 hover:bg-amber-500/30"
-                      : "bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200"
-                  }`}
-                  title="Activar/desactivar tono barítono profundo"
+                  data-skip-welcome-autoplay="true"
+                  onClick={onStopVoice}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-900/80 hover:bg-rose-800 text-rose-100 border border-rose-500/70 text-xs font-bold cursor-pointer transition-all"
                 >
-                  <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{forceBaritonePitch ? "Barítono: ON" : "Barítono: OFF"}</span>
+                  <VolumeX className="w-4 h-4" />
+                  <span>Silenciar</span>
                 </button>
               )}
               <button
                 type="button"
+                data-skip-welcome-autoplay="true"
                 onClick={() => onPlayVoice(tuningResult.message)}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/60 text-xs font-bold cursor-pointer transition-all shadow-sm"
                 title="Escuchar nuevamente este mensaje hablado"
@@ -559,13 +889,12 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
             </div>
           </div>
 
-          {/* Mensaje de la civilización */}
-          <div className="p-4 sm:p-5 rounded-xl bg-slate-950/80 border border-emerald-500/30 text-slate-100 font-sans text-sm sm:text-base leading-relaxed relative shadow-inner">
+          <div className="p-4 sm:p-5 rounded-xl bg-slate-950/80 border border-slate-800 text-slate-100 font-sans text-sm sm:text-base leading-relaxed relative shadow-inner">
             <span className="text-[10px] font-mono text-emerald-400 font-bold block mb-1.5 uppercase tracking-wider">
               📡 TRANSMISIÓN DESDE {dimension}:
             </span>
             <p className="italic text-emerald-100 font-medium">
-              "{tuningResult.message}"
+              &ldquo;{tuningResult.message}&rdquo;
             </p>
             {tuningResult.guidance && (
               <div className="mt-3 pt-3 border-t border-slate-800/80 text-xs text-slate-300 flex items-start gap-2">
@@ -591,10 +920,23 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
 
       {/* Si hay una respuesta activa de la entidad, mostrarla arriba de forma destacada */}
       {transmitResult && (
-        <div id="oracle-answer-card" className="rounded-2xl bg-gradient-to-b from-slate-900 to-indigo-950/90 border-2 border-emerald-400/80 p-5 sm:p-7 shadow-[0_0_35px_rgba(16,185,129,0.25)] space-y-5 animate-in fade-in duration-300">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-500/30 pb-4">
+        <div
+          id="oracle-answer-card"
+          className="rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border-2 p-5 sm:p-7 space-y-5 animate-in fade-in duration-300"
+          style={{
+            borderColor: `${selectedEntity.accentHex}cc`,
+            boxShadow: `0 0 38px ${selectedEntity.accentHex}35`,
+          }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center text-2xl shadow-inner">
+              <div
+                className="w-12 h-12 rounded-2xl border flex items-center justify-center text-2xl shadow-inner"
+                style={{
+                  backgroundColor: `${selectedEntity.accentHex}22`,
+                  borderColor: `${selectedEntity.accentHex}66`,
+                }}
+              >
                 {selectedEntity.emoji}
               </div>
               <div>
@@ -608,7 +950,6 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
               </div>
             </div>
 
-            {/* Controles de audio de la voz */}
             <div className="flex items-center gap-2">
               {isOperatorAdmin && onToggleForceBaritonePitch && (
                 <button
@@ -628,6 +969,7 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
               {isSpeakingSolemn ? (
                 <button
                   type="button"
+                  data-skip-welcome-autoplay="true"
                   onClick={onStopVoice}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-900/80 hover:bg-rose-800 text-white font-bold text-xs border border-rose-500 shadow-lg cursor-pointer transition-all animate-pulse"
                 >
@@ -637,6 +979,7 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
               ) : (
                 <button
                   type="button"
+                  data-skip-welcome-autoplay="true"
                   onClick={() => onPlayVoice(transmitResult.reaction)}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-[0_0_15px_rgba(16,185,129,0.4)] cursor-pointer transition-all"
                 >
@@ -647,13 +990,11 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
             </div>
           </div>
 
-          {/* Texto de la respuesta */}
           <div className="space-y-4">
             <div className="p-4 sm:p-5 rounded-xl bg-slate-950/80 border border-slate-800 text-slate-100 text-base sm:text-lg leading-relaxed font-sans shadow-inner">
               <p className="whitespace-pre-line">{transmitResult.reaction}</p>
             </div>
 
-            {/* Consejo o Guía */}
             {transmitResult.guidance && (
               <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-200">
                 <Sparkles className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
@@ -668,7 +1009,6 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
               </div>
             )}
 
-            {/* Código / Arquetipo Estelar */}
             {transmitResult.oracleCard && (
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-400 bg-slate-900/60 p-3 rounded-lg border border-slate-800">
                 <span className="text-amber-300 font-bold">
@@ -683,19 +1023,30 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
             )}
           </div>
 
-          {/* Botones de acción posterior */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={() => {
-                onClearTransmitResult();
-                setTransmissionMessage("");
-              }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md cursor-pointer transition-all"
-            >
-              <MessageSquare className="w-4 h-4" />
-              <span>Hacer otra pregunta a esta entidad</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onClearTransmitResult();
+                  setTransmissionMessage("");
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md cursor-pointer transition-all"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Hacer otra pregunta a esta entidad</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleShareAnswer}
+                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40 text-xs font-bold shadow-sm cursor-pointer transition-all"
+                title="Compartir o copiar el mensaje recibido"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>{copiedAnswer ? "¡Mensaje copiado!" : "Compartir mensaje"}</span>
+              </button>
+            </div>
 
             {isOperatorAdmin && (
               <button
@@ -722,17 +1073,15 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
                 Elige la antena y civilización con quién comunicarte
               </h3>
               <p className="text-xs text-slate-400 font-sans mt-0.5">
-                Al seleccionar una civilización, aguarde mientras se establece la comunicación; la civilización emitirá su mensaje en directo.
+                Al seleccionarla, se acopla su frecuencia y emite su señal en directo.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-slate-400 hidden sm:inline">
-              Toca una entidad para sintonizarla
-            </span>
             {onOpenAntennaModal && (
               <button
                 type="button"
+                data-skip-welcome-autoplay="true"
                 onClick={onOpenAntennaModal}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-mono font-bold transition-all cursor-pointer self-start sm:self-auto shrink-0"
               >
@@ -743,7 +1092,6 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
           </div>
         </div>
 
-        {/* Grid de Entidades amigables */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {FRIENDLY_ENTITIES.map((ent) => {
             const isSelected = ent.id === activePresetId;
@@ -751,19 +1099,30 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
               <button
                 key={ent.id}
                 type="button"
+                data-skip-welcome-autoplay="true"
                 onClick={() => handleEntityClick(ent.id)}
                 className={`text-left p-4 rounded-xl border transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 relative ${
                   isSelected
-                    ? "bg-slate-850 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)] ring-1 ring-emerald-400"
+                    ? "bg-slate-850 ring-1"
                     : "bg-slate-950/60 hover:bg-slate-850/80 border-slate-800 hover:border-slate-700"
                 }`}
+                style={
+                  isSelected
+                    ? {
+                        borderColor: ent.accentHex,
+                        boxShadow: `0 0 22px ${ent.accentHex}38`,
+                      }
+                    : undefined
+                }
               >
                 {isSelected && (
-                  <span className={`absolute top-3 right-3 flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    isTuning
-                      ? "text-cyan-300 bg-cyan-950/90 border-cyan-400 animate-pulse shadow-[0_0_10px_rgba(6,182,212,0.5)]"
-                      : "text-emerald-400 bg-emerald-950/90 border-emerald-500/50"
-                  }`}>
+                  <span
+                    className={`absolute top-3 right-3 flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      isTuning
+                        ? "text-cyan-300 bg-cyan-950/90 border-cyan-400 animate-pulse shadow-[0_0_10px_rgba(6,182,212,0.5)]"
+                        : "text-emerald-400 bg-emerald-950/90 border-emerald-500/50"
+                    }`}
+                  >
                     {isTuning ? (
                       <>
                         <RefreshCw className="w-3 h-3 animate-spin text-cyan-400" />
@@ -801,9 +1160,9 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
                       {ent.tag}
                     </span>
                     {(ent.id === "whisper-void" || ent.id === "sirius-enki") && (
-                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center gap-1">
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/35 text-amber-300 flex items-center gap-1">
                         <Zap className="w-2.5 h-2.5" />
-                        <span>Barítono 432/528 Hz</span>
+                        <span>{isOperatorAdmin ? "Barítono 432/528 Hz" : ent.resonantTag}</span>
                       </span>
                     )}
                   </div>
@@ -812,7 +1171,7 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
                       isSelected ? "text-emerald-400" : "text-slate-500"
                     }`}
                   >
-                    {isSelected ? "Listo para hablar" : "Seleccionar →"}
+                    {isSelected ? "Enlazado" : "Sintonizar →"}
                   </span>
                 </div>
               </button>
@@ -840,7 +1199,6 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
           )}
         </div>
 
-        {/* Textarea y Botón de Dictado por Voz */}
         <div className="relative">
           <textarea
             value={transmissionMessage}
@@ -850,9 +1208,9 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
             className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl p-4 pr-14 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-inner resize-none font-sans"
           />
 
-          {/* Botón de Dictado por Micrófono */}
           <button
             type="button"
+            data-skip-welcome-autoplay="true"
             onClick={isRecording ? onStopVoiceRecording : onStartVoiceRecording}
             className={`absolute right-3 top-3 p-2.5 rounded-xl border transition-all cursor-pointer shadow-md ${
               isRecording
@@ -865,7 +1223,6 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
           </button>
         </div>
 
-        {/* Preguntas sugeridas para inspirarse */}
         <div className="space-y-2">
           <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -885,7 +1242,6 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
           </div>
         </div>
 
-        {/* INDICADOR Y MONITOR DE ESPERA DE CONEXIÓN CUÁNTICA (HUD) */}
         {(isTransmitting || isTuning) && (
           <div className="pt-2">
             <TransdimensionalTuningHUD
@@ -904,6 +1260,7 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
         <div className="pt-2">
           <button
             type="button"
+            data-skip-welcome-autoplay="true"
             onClick={onTransmit}
             disabled={isTransmitting || isTuning}
             className={`w-full py-4 px-6 rounded-xl font-black text-base flex items-center justify-center gap-3 transition-all duration-300 cursor-pointer shadow-xl ${
@@ -913,15 +1270,10 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
             }`}
           >
             {isTransmitting ? (
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5">
-                <div className="flex items-center gap-2">
-                  <RefreshCw className="w-5 h-5 animate-spin text-amber-400" />
-                  <span className="font-extrabold text-sm sm:text-base text-amber-200">
-                    SINTONIZANDO RESPUESTA... POR FAVOR AGUARDE
-                  </span>
-                </div>
-                <span className="text-xs font-mono font-black text-amber-300 bg-amber-950/90 px-2.5 py-0.5 rounded-full border border-amber-400/80 shadow-inner">
-                  ⏳ 3 a 5 segs
+              <div className="flex items-center justify-center gap-2.5">
+                <RefreshCw className="w-5 h-5 animate-spin text-amber-400" />
+                <span className="font-extrabold text-sm sm:text-base text-amber-200">
+                  ENLAZANDO PORTADORA INTERESTELAR...
                 </span>
               </div>
             ) : isTuning ? (
@@ -939,26 +1291,93 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
             )}
           </button>
 
-          {/* Mensaje de apoyo e instrucción clara bajo el botón */}
           {!isTransmitting && !isTuning && (
             <p className="text-center text-[11px] font-sans text-slate-400 mt-2.5 flex items-center justify-center gap-1.5">
-              <span>⏳</span>
+              <span>📡</span>
               <span>
-                <strong className="text-emerald-300 font-semibold">Demora estimada: 3 a 5 segundos.</strong> Al presionar, por favor aguarda unos instantes mientras se decodifica y habla la respuesta.
+                Canal cuántico listo — Al enviar, recibirás la decodificación y voz de <strong className="text-emerald-300 font-semibold">{selectedEntity.title}</strong> en directo.
               </span>
             </p>
           )}
         </div>
       </div>
 
-      {/* Blog y Acceso Operador */}
+      {/* HISTORIAL DE CONVERSACIONES DE ESTA SESIÓN */}
+      {sessionHistory.length > 0 && (
+        <div className="rounded-2xl bg-slate-900/80 border border-slate-800 overflow-hidden shadow-lg">
+          <button
+            type="button"
+            onClick={() => setIsHistoryExpanded((prev) => !prev)}
+            className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-slate-850/60 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5">
+              <History className="w-4 h-4 text-indigo-400" />
+              <span className="text-xs sm:text-sm font-bold text-slate-200 uppercase tracking-wide font-mono">
+                Conversaciones de esta sesión ({sessionHistory.length})
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
+              <span>{isHistoryExpanded ? "Ocultar" : "Ver historial"}</span>
+              {isHistoryExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </div>
+          </button>
+
+          {isHistoryExpanded && (
+            <div className="px-5 pb-4 pt-1 space-y-3 border-t border-slate-800/80">
+              {sessionHistory.map((item) => (
+                <div
+                  key={item.id}
+                  className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
+                    <div className="flex items-center gap-2">
+                      <span>{item.entityEmoji}</span>
+                      <span className="font-bold text-white">{item.entityTitle}</span>
+                      <span
+                        className="px-1.5 py-0.5 rounded text-[10px] border"
+                        style={{
+                          color: item.accentHex,
+                          borderColor: `${item.accentHex}44`,
+                          backgroundColor: `${item.accentHex}14`,
+                        }}
+                      >
+                        {item.frequencyLabel}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-500">{item.timestamp}</span>
+                      <button
+                        type="button"
+                        data-skip-welcome-autoplay="true"
+                        onClick={() => onPlayVoice(item.reaction)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold cursor-pointer transition-colors"
+                      >
+                        <Volume2 className="w-3 h-3" />
+                        <span>Escuchar</span>
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-indigo-300 font-sans">
+                    <strong>Tú:</strong> {item.question}
+                  </p>
+                  <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                    {item.reaction}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Pie limpio sin duplicar Libro de Visitas */}
       <div className="rounded-xl bg-slate-950/60 border border-slate-850 p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
         <div className="flex items-center gap-2">
           <Radio className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>
             {isOperatorAdmin
-              ? "¿Deseas calibrar frecuencias y osciloscopio en la consola avanzada o revisar el Libro de Visitas?"
-              : "Estación activa en frecuencia interestelar. Puedes leer los mensajes y saludos en nuestro Libro de Visitas."}
+              ? "¿Deseas calibrar frecuencias y el Modo Observatorio en la consola avanzada?"
+              : "Estación activa en frecuencia interestelar • Puedes firmar el Libro de Visitas en la barra superior."}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -972,16 +1391,6 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
               <Users className="w-3.5 h-3.5 text-emerald-400" />
               <span>Visitas reales: <strong className="text-white">{visitsCount.toLocaleString()}</strong></span>
-            </button>
-          )}
-          {onOpenBlog && (
-            <button
-              type="button"
-              onClick={onOpenBlog}
-              className="px-3.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-              <span>📖 Libro de Visitas</span>
             </button>
           )}
           {isOperatorAdmin && (
@@ -1018,8 +1427,7 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
 
             <div className="space-y-3.5 text-sm text-slate-300 leading-relaxed font-sans">
               <p>
-                Esta aplicación es una <strong>estación interactiva de radioastronomía cuántica</strong> diseñada para
-                sintonizar diferentes tipos de antenas y comunicarse con civilizaciones e inteligencias extraterrestres.
+                Esta estación interactiva de <strong>radioastronomía cuántica</strong> sintoniza diferentes frecuencias para establecer enlace con civilizaciones e inteligencias estelares.
               </p>
 
               <div className="space-y-2 text-xs">
@@ -1027,7 +1435,7 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
                   <span className="text-emerald-400 font-bold text-sm">1.</span>
                   <div>
                     <strong className="text-white">Elige la antena y civilización:</strong> Selecciona a los Pleyadianos,
-                    Arcturianos, Consejo de Orión o Elohim. Cada entidad emite en su propia frecuencia armónica.
+                    Arcturianos, Sirio, Consejo de Orión o Elohim. Cada entidad emite en su propia frecuencia armónica.
                   </div>
                 </div>
 
@@ -1035,29 +1443,29 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
                   <span className="text-emerald-400 font-bold text-sm">2.</span>
                   <div>
                     <strong className="text-white">Haz tu pregunta:</strong> Puedes escribir
-                    cualquier duda sincera sobre tu vida o el cosmos, o pulsar el micrófono para dictarla hablando con tu voz.
+                    cualquier duda sincera sobre tu vida o el cosmos, o pulsar el micrófono para dictarla con tu voz.
                   </div>
                 </div>
 
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start gap-2.5">
                   <span className="text-emerald-400 font-bold text-sm">3.</span>
                   <div>
-                    <strong className="text-white">Recibe y escucha:</strong> Pulsa <em>Sintonizar Respuesta</em>.
-                    La señal se decodifica en tiempo real y la app reproduce la respuesta en voz alta.
+                    <strong className="text-white">Recibe y escucha:</strong> Pulsa <em>Preguntar a la Entidad y Escuchar Respuesta</em>.
+                    La señal se decodifica en directo y escucharás la transmisión por voz.
                   </div>
                 </div>
 
                 <div className="p-3 rounded-lg bg-slate-950 border border-indigo-500/40 flex items-start gap-2.5">
                   <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-amber-300">Decodificación Acústica Ancestral:</strong>{" "}
+                    <strong className="text-amber-300">Resonancia Armónica Originaria:</strong>{" "}
                     {isOperatorAdmin ? (
                       <span>
                         Como Operador Maestro tienes acceso a la calibración fina de registros barítonos profundos (0.15x - 0.45x) para <strong>Pléyades (432 Hz)</strong> y <strong>Sirio (528 Hz)</strong>.
                       </span>
                     ) : (
                       <span>
-                        Las señales de civilizaciones milenarias como <strong>Pléyades (432 Hz)</strong> y <strong>Sirio (528 Hz)</strong> se decodifican automáticamente en resonancias barítonas solemnes y profundas con acento neutro para reflejar su vibración originaria.
+                        Las emisiones de civilizaciones milenarias como <strong>Pléyades (432 Hz)</strong> y <strong>Sirio (528 Hz)</strong> se reciben en sus frecuencias graves ancestrales con fidelidad acústica directa.
                       </span>
                     )}
                   </div>
@@ -1065,8 +1473,7 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
               </div>
 
               <p className="text-xs text-slate-400 italic">
-                ¡Comparte el enlace con tus amigos para que ellos también puedan realizar sus
-                consultas!
+                ¡Comparte el enlace o el mensaje recibido con tus amigos para que ellos también realicen sus consultas!
               </p>
             </div>
 
