@@ -3,7 +3,17 @@
  * Registra visitas reales y eventos sin depender de Mixpanel ni servicios de pago.
  */
 
-import { safeStorage } from "./utils/storage";
+import { safeStorage, safeSessionStorage } from "./utils/storage";
+
+const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 6000): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
 
 const STORAGE_VISITS_KEY = "antena_universal_visits_count";
 const STORAGE_EVENTS_KEY = "antena_telemetry_events_log";
@@ -133,14 +143,13 @@ export const setOperatorExclusionState = (excluded: boolean): boolean => {
 export const fetchServerVisits = async (): Promise<number> => {
   let count = getStoredVisits();
   try {
-    const res = await fetch("/api/visits?t=" + Date.now(), {
+    const res = await fetchWithTimeout("/api/visits?t=" + Date.now(), {
       method: "GET",
       headers: { 
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "Pragma": "no-cache"
       },
-      signal: AbortSignal.timeout(6000),
-    });
+    }, 6000);
     if (res.ok) {
       const data = await res.json();
       if (data && typeof data.visits === "number") {
@@ -166,33 +175,23 @@ export const registerUniversalVisit = async (force: boolean = false): Promise<nu
 
   // Cooldown breve de 2 segundos para evitar rebote de doble clic pero permitir contar en cada recarga
   const now = Date.now();
-  let lastTime = 0;
-  if (typeof sessionStorage !== "undefined") {
-    try {
-      lastTime = parseInt(sessionStorage.getItem(LAST_INCREMENT_TIME_KEY) || "0", 10);
-    } catch (e) {}
-  }
+  const lastTime = parseInt(safeSessionStorage.getItem(LAST_INCREMENT_TIME_KEY) || "0", 10);
 
   const shouldIncrement = force || isNaN(lastTime) || now - lastTime > 2000;
 
   if (shouldIncrement) {
-    if (typeof sessionStorage !== "undefined") {
-      try {
-        sessionStorage.setItem(LAST_INCREMENT_TIME_KEY, String(now));
-      } catch (e) {}
-    }
+    safeSessionStorage.setItem(LAST_INCREMENT_TIME_KEY, String(now));
 
     logTelemetryEvent("visita", `Nueva conexión registrada desde ${getDeviceInfo()}`);
 
     try {
-      const res = await fetch("/api/visits/increment", {
+      const res = await fetchWithTimeout("/api/visits/increment", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
           "Cache-Control": "no-cache"
         },
-        signal: AbortSignal.timeout(6000),
-      });
+      }, 6000);
 
       if (res.ok) {
         const data = await res.json();
@@ -227,12 +226,11 @@ export const setUniversalVisits = async (newCount: number): Promise<number> => {
   saveStoredVisits(val);
   logTelemetryEvent("visita", `Contador ajustado manualmente a ${val}`);
   try {
-    const res = await fetch("/api/visits/set", {
+    const res = await fetchWithTimeout("/api/visits/set", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ count: val }),
-      signal: AbortSignal.timeout(6000),
-    });
+    }, 6000);
     if (res.ok) {
       const data = await res.json();
       if (data && typeof data.visits === "number") {

@@ -1,14 +1,13 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
@@ -88,15 +87,18 @@ function saveMixpanelTokenServer(token: string): string {
   return cleanToken;
 }
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    }
-  }
-});
+// Initialize Gemini Client only when API key is present
+const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
+const ai = geminiApiKey
+  ? new GoogleGenAI({
+      apiKey: geminiApiKey,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
+      },
+    })
+  : null;
 
 // Robust JSON parsing helper to strip markdown or stray text
 function cleanAndParseJson(text: string): any {
@@ -578,6 +580,10 @@ app.post("/api/tts", async (req, res) => {
 
   const ttsModels = ["gemini-3.1-flash-tts-preview", "gemini-3.6-flash"];
 
+  if (!ai) {
+    return res.json({ status: "fallback", message: "Síntesis local activa", audio: null });
+  }
+
   try {
     console.log(`[TTS Server] Generando voz masculina (${isSolemn ? "Solemne Fenrir" : "Estándar Puck"}) para:`, cleanText.slice(0, 50));
     
@@ -632,6 +638,9 @@ app.post("/api/tts", async (req, res) => {
 
 // Helper con soporte multimodelo para tolerar límites de cuotas y asegurar rápida respuesta (<4s)
 async function generateGeminiContentWithTimeout(prompt: string, timeoutMs = 4500) {
+  if (!ai) {
+    throw new Error("Canal procedural local activo");
+  }
   const candidateModels = ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
   let lastError: any = null;
 
@@ -984,6 +993,7 @@ async function startServer() {
   }
 
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: false },
       appType: "spa",
@@ -991,14 +1001,21 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    const indexHtmlPath = path.join(distPath, "index.html");
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+    }
     app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      if (fs.existsSync(indexHtmlPath)) {
+        res.sendFile(indexHtmlPath);
+      } else {
+        res.status(503).send("Build not found. Run npm run build first.");
+      }
     });
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[Antena Interdimensional Server] Running on http://localhost:${PORT}`);
+    console.log(`[Antena Interdimensional Server] Running on http://0.0.0.0:${PORT}`);
   });
 }
 

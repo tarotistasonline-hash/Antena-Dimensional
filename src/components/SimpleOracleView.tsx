@@ -210,9 +210,15 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
         // User cancelled or unsupported
       }
     } else {
-      navigator.clipboard.writeText(window.location.href);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2500);
+      try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+          await navigator.clipboard.writeText(window.location.href);
+        }
+        setCopiedLink(true);
+        setTimeout(() => setCopiedLink(false), 2500);
+      } catch (e) {
+        // Fallback silencioso si el portapapeles está bloqueado por el iframe
+      }
     }
   };
 

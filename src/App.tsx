@@ -80,7 +80,28 @@ import { SimpleOracleView } from "./components/SimpleOracleView";
 import { OperatorAuthModal } from "./components/OperatorAuthModal";
 import { TransdimensionalTuningHUD } from "./components/TransdimensionalTuningHUD";
 import { WELCOME_AUDIO_EXPLANATION } from "./components/WelcomeVoiceGuide";
-import { safeStorage } from "./utils/storage";
+import { safeStorage, safeRandomId } from "./utils/storage";
+
+const safeCancelSpeech = () => {
+  try {
+    if (typeof window !== "undefined" && window.speechSynthesis && typeof window.speechSynthesis.cancel === "function") {
+      window.speechSynthesis.cancel();
+    }
+  } catch (e) {
+    // Ignore speechSynthesis errors in restricted contexts
+  }
+};
+
+const getSafeNotificationPermission = (): "default" | "granted" | "denied" => {
+  try {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      return (Notification.permission as "default" | "granted" | "denied") || "default";
+    }
+  } catch (e) {
+    // Ignore SecurityError in sandboxed iframes
+  }
+  return "default";
+};
 
 interface QuantumToast {
   id: string;
@@ -390,9 +411,7 @@ export default function App() {
     }
 
     // Cancelar síntesis de voz nativa del navegador
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
+    safeCancelSpeech();
   };
 
   useEffect(() => {
@@ -507,7 +526,7 @@ export default function App() {
   };
 
   const addToast = (title: string, message: string, type: "anomaly" | "high-intensity") => {
-    const id = crypto.randomUUID();
+    const id = safeRandomId();
     const newToast: QuantumToast = { id, title, message, type, timestamp: new Date() };
     setToasts((prev) => [newToast, ...prev].slice(0, 5)); // max 5 toasts
     
@@ -539,7 +558,7 @@ export default function App() {
       return;
     }
 
-    const currentPerm = Notification.permission;
+    const currentPerm = getSafeNotificationPermission();
     setNotificationPermission(currentPerm);
 
     if (currentPerm === "denied") {
@@ -573,7 +592,7 @@ export default function App() {
   // Recomprobar estado de permisos de notificación
   const recheckNotificationPermission = () => {
     if (typeof window !== "undefined" && "Notification" in window) {
-      const perm = Notification.permission;
+      const perm = getSafeNotificationPermission();
       setNotificationPermission(perm);
       if (perm === "granted") {
         setShowNotificationGuide(false);
@@ -606,7 +625,7 @@ export default function App() {
     }
 
     if (typeof window === "undefined" || !("Notification" in window)) return;
-    if (Notification.permission === "granted") {
+    if (getSafeNotificationPermission() === "granted") {
       const icon = type === "anomaly" ? "⚠️" : "📡";
       const cleanBody = body
         .replace(/\[.*?\]/g, "")
@@ -669,9 +688,7 @@ export default function App() {
       }
 
       // Asegurar cancelación de voz nativa del navegador previa
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
+      safeCancelSpeech();
 
       // Dynamic sample rate parsing (Gemini default 24000Hz or 16000Hz)
       let sampleRate = 24000;
@@ -887,21 +904,30 @@ export default function App() {
     }
 
     try {
-      window.speechSynthesis.cancel();
+      safeCancelSpeech();
 
-      let voices = window.speechSynthesis.getVoices();
-      if (voices.length === 0) {
+      let voices = typeof window.speechSynthesis.getVoices === "function" ? window.speechSynthesis.getVoices() : [];
+      if (voices.length === 0 && typeof window.speechSynthesis.addEventListener === "function") {
         // En navegadores Chromium, getVoices() puede demorar unos milisegundos en inicializarse
         await new Promise<void>((resolve) => {
           const timer = setTimeout(() => resolve(), 200);
           const handleVoices = () => {
-            window.speechSynthesis.removeEventListener("voiceschanged", handleVoices);
+            try {
+              if (typeof window.speechSynthesis.removeEventListener === "function") {
+                window.speechSynthesis.removeEventListener("voiceschanged", handleVoices);
+              }
+            } catch (e) {}
             clearTimeout(timer);
             resolve();
           };
-          window.speechSynthesis.addEventListener("voiceschanged", handleVoices);
+          try {
+            window.speechSynthesis.addEventListener("voiceschanged", handleVoices);
+          } catch (e) {
+            clearTimeout(timer);
+            resolve();
+          }
         });
-        voices = window.speechSynthesis.getVoices();
+        voices = typeof window.speechSynthesis.getVoices === "function" ? window.speechSynthesis.getVoices() : [];
       }
 
       const spanishVoices = voices.filter((v) => v.lang.toLowerCase().startsWith("es"));
@@ -1105,16 +1131,26 @@ export default function App() {
           }
         };
 
-        if (typeof window !== "undefined" && window.speechSynthesis) {
-          window.speechSynthesis.resume();
-        }
-        window.speechSynthesis.speak(utterance);
+        try {
+          if (typeof window !== "undefined" && window.speechSynthesis) {
+            if (typeof window.speechSynthesis.resume === "function") {
+              window.speechSynthesis.resume();
+            }
+            if (typeof window.speechSynthesis.speak === "function") {
+              window.speechSynthesis.speak(utterance);
+            }
+          }
+        } catch (e) {}
       };
 
       // Breve retardo tras cancel() para asegurar la inicialización del hilo de audio en Chrome/Edge
       setTimeout(() => {
         if (currentSessionId === ttsSessionIdRef.current && typeof window !== "undefined" && window.speechSynthesis) {
-          window.speechSynthesis.resume();
+          try {
+            if (typeof window.speechSynthesis.resume === "function") {
+              window.speechSynthesis.resume();
+            }
+          } catch (e) {}
           radioStatic.stop();
           speakNextChunk(0);
         }
@@ -1225,25 +1261,31 @@ export default function App() {
 
     // 2. Si las voces del navegador tardan unos milisegundos en cargarse, reactivar de inmediato al estar listas
     const handleVoicesReady = () => {
-      const isCurrentlySpeaking =
-        (typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.speaking) ||
-        activeAudioNodeRef.current !== null;
+      let isSpeechActive = false;
+      try {
+        isSpeechActive = Boolean(typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.speaking);
+      } catch (e) {}
+      const isCurrentlySpeaking = isSpeechActive || activeAudioNodeRef.current !== null;
 
       if (!isCurrentlySpeaking) {
         hasTriggered = false;
         playWelcomeGuide();
       }
     };
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.addEventListener("voiceschanged", handleVoicesReady, { once: true });
-    }
+    try {
+      if (typeof window !== "undefined" && window.speechSynthesis && typeof window.speechSynthesis.addEventListener === "function") {
+        window.speechSynthesis.addEventListener("voiceschanged", handleVoicesReady, { once: true });
+      }
+    } catch (e) {}
 
     // 3. Si el navegador retiene el audio por la directiva de autoplay,
     // se reanuda de inmediato con el primer gesto o interacción en la ventana.
     const handleFirstInteraction = () => {
-      const isCurrentlySpeaking =
-        (typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.speaking) ||
-        activeAudioNodeRef.current !== null;
+      let isSpeechActive = false;
+      try {
+        isSpeechActive = Boolean(typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.speaking);
+      } catch (e) {}
+      const isCurrentlySpeaking = isSpeechActive || activeAudioNodeRef.current !== null;
 
       if (!isCurrentlySpeaking) {
         hasTriggered = false;
@@ -1260,9 +1302,11 @@ export default function App() {
       window.removeEventListener("pointermove", handleFirstInteraction);
       window.removeEventListener("scroll", handleFirstInteraction);
       window.removeEventListener("focus", handleFirstInteraction);
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.removeEventListener("voiceschanged", handleVoicesReady);
-      }
+      try {
+        if (typeof window !== "undefined" && window.speechSynthesis && typeof window.speechSynthesis.removeEventListener === "function") {
+          window.speechSynthesis.removeEventListener("voiceschanged", handleVoicesReady);
+        }
+      } catch (e) {}
     };
 
     window.addEventListener("pointerdown", handleFirstInteraction, { passive: true });
@@ -1533,9 +1577,7 @@ export default function App() {
     }
 
     // Detect web notification permission
-    if (typeof window !== "undefined" && "Notification" in window) {
-      setNotificationPermission(Notification.permission as any);
-    }
+    setNotificationPermission(getSafeNotificationPermission());
 
     // Cargar bitácora local
     const savedLogs = safeStorage.getItem("antena_dimensional_logs");
@@ -1548,39 +1590,43 @@ export default function App() {
     }
 
     // Inicializar voces de síntesis de voz (Speech Synthesis)
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      const updateVoicesList = () => {
-        const voices = window.speechSynthesis.getVoices();
-        const spanish = voices.filter(v => v.lang.toLowerCase().startsWith("es"));
-        const listToUse = spanish.length > 0 ? spanish : voices;
+    try {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        const updateVoicesList = () => {
+          try {
+            const voices = typeof window.speechSynthesis.getVoices === "function" ? window.speechSynthesis.getVoices() : [];
+            const spanish = voices.filter(v => v.lang.toLowerCase().startsWith("es"));
+            const listToUse = spanish.length > 0 ? spanish : voices;
 
-        const maleKW = [
-          "jorge", "julio", "juan", "diego", "miguel", "carlos", "daniel", "yadir",
-          "male", "hombre", "sebastian", "sebastián", "pablo", "raul", "raúl", "esteban",
-          "david", "mateo", "alejandro", "gonzalo", "rodrigo", "andres", "andrés",
-          "fernando", "felipe", "alberto", "mario", "javier", "sergio", "manuel",
-          "hector", "héctor", "hugo", "ramon", "ramón", "emilio", "ignacio", "arturo",
-          "gustavo", "tomas", "tomás", "pablo online", "microsoft jorge", "microsoft raul",
-          "google español de estados unidos"
-        ];
+            const maleKW = [
+              "jorge", "julio", "juan", "diego", "miguel", "carlos", "daniel", "yadir",
+              "male", "hombre", "sebastian", "sebastián", "pablo", "raul", "raúl", "esteban",
+              "david", "mateo", "alejandro", "gonzalo", "rodrigo", "andres", "andrés",
+              "fernando", "felipe", "alberto", "mario", "javier", "sergio", "manuel",
+              "hector", "héctor", "hugo", "ramon", "ramón", "emilio", "ignacio", "arturo",
+              "gustavo", "tomas", "tomás", "pablo online", "microsoft jorge", "microsoft raul",
+              "google español de estados unidos"
+            ];
 
-        const sorted = [...listToUse].sort((a, b) => {
-          const nameA = a.name.toLowerCase();
-          const nameB = b.name.toLowerCase();
-          const isMaleA = maleKW.some((kw) => nameA.includes(kw));
-          const isMaleB = maleKW.some((kw) => nameB.includes(kw));
-          if (isMaleA && !isMaleB) return -1;
-          if (!isMaleA && isMaleB) return 1;
-          return 0;
-        });
+            const sorted = [...listToUse].sort((a, b) => {
+              const nameA = a.name.toLowerCase();
+              const nameB = b.name.toLowerCase();
+              const isMaleA = maleKW.some((kw) => nameA.includes(kw));
+              const isMaleB = maleKW.some((kw) => nameB.includes(kw));
+              if (isMaleA && !isMaleB) return -1;
+              if (!isMaleA && isMaleB) return 1;
+              return 0;
+            });
 
-        setAvailableVoices(sorted);
-      };
-      updateVoicesList();
-      if (window.speechSynthesis.onvoiceschanged !== undefined) {
-        window.speechSynthesis.onvoiceschanged = updateVoicesList;
+            setAvailableVoices(sorted);
+          } catch (e) {}
+        };
+        updateVoicesList();
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+          window.speechSynthesis.onvoiceschanged = updateVoicesList;
+        }
       }
-    }
+    } catch (e) {}
 
     return () => {
       clearInterval(visitsInterval);
@@ -1907,7 +1953,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
 
       // Crear nueva entrada de bitácora
       const newLog: LogEntry = {
-        id: crypto.randomUUID(),
+        id: safeRandomId(),
         timestamp: new Date().toISOString(),
         frequency: freqString,
         dimension: targetDimension,
@@ -2177,7 +2223,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
 
         // Crear registro en la bitácora
         const newLog: LogEntry = {
-          id: crypto.randomUUID(),
+          id: safeRandomId(),
           timestamp: new Date().toISOString(),
           frequency: freqString,
           dimension: randomPreset.name,
@@ -2340,7 +2386,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
 
       // Crear nueva entrada de bitácora
       const newLog: LogEntry = {
-        id: crypto.randomUUID(),
+        id: safeRandomId(),
         timestamp: new Date().toISOString(),
         frequency: freqString,
         dimension,
@@ -2857,7 +2903,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               setForceBaritonePitch(next);
               setForceLowPitch(next);
               safeStorage.setItem("antena_force_baritone", String(next));
-              if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+              safeCancelSpeech();
             }}
             baritonePitchValue={baritonePitchValue}
             onChangeBaritonePitch={(val: number) => {
@@ -2865,7 +2911,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               setCustomPitchValue(val);
               setBaritonePreset("custom");
               safeStorage.setItem("antena_baritone_pitch", String(val));
-              if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+              safeCancelSpeech();
             }}
             baritonePreset={baritonePreset}
             onSelectBaritonePreset={(p: "pleiades" | "sirius" | "ancient" | "custom") => {
@@ -2878,7 +2924,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               setCustomPitchValue(val);
               safeStorage.setItem("antena_baritone_pitch", String(val));
               safeStorage.setItem("antena_baritone_preset", p);
-              if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+              safeCancelSpeech();
             }}
             onTestBaritoneVoice={testBaritoneVoice}
             isRecording={isRecording}
@@ -3677,7 +3723,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                     type="button"
                     onClick={() => {
                       setVoiceTone("alternar");
-                      if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+                      safeCancelSpeech();
                     }}
                     className={`px-1.5 py-1.5 rounded text-[9px] font-mono font-bold uppercase tracking-tight transition-all cursor-pointer border ${
                       voiceTone === "alternar"
@@ -3691,7 +3737,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                     type="button"
                     onClick={() => {
                       setVoiceTone("solemne-hombre");
-                      if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+                      safeCancelSpeech();
                     }}
                     className={`px-1.5 py-1.5 rounded text-[9px] font-mono font-bold uppercase tracking-tight transition-all cursor-pointer border ${
                       voiceTone === "solemne-hombre"
@@ -3705,7 +3751,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                     type="button"
                     onClick={() => {
                       setVoiceTone("estandar");
-                      if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+                      safeCancelSpeech();
                     }}
                     className={`px-1.5 py-1.5 rounded text-[9px] font-mono font-bold uppercase tracking-tight transition-all cursor-pointer border ${
                       voiceTone === "estandar"
@@ -3719,7 +3765,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                     type="button"
                     onClick={() => {
                       setVoiceTone("latino-neutro");
-                      if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+                      safeCancelSpeech();
                     }}
                     className={`px-1.5 py-1.5 rounded text-[9px] font-mono font-bold uppercase tracking-tight transition-all cursor-pointer border ${
                       voiceTone === "latino-neutro"
@@ -3747,7 +3793,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                     value={selectedVoiceURI}
                     onChange={(e) => {
                       setSelectedVoiceURI(e.target.value);
-                      if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+                      safeCancelSpeech();
                     }}
                     className="w-full text-[10px] font-mono bg-slate-950 border border-slate-850 hover:border-indigo-500/30 text-indigo-300 rounded px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500/40 cursor-pointer"
                   >
@@ -3793,7 +3839,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                       setForceBaritonePitch(next);
                       setForceLowPitch(next);
                       safeStorage.setItem("antena_force_baritone", String(next));
-                      if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+                      safeCancelSpeech();
                     }}
                     className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase transition-all cursor-pointer border ${
                       forceBaritonePitch
@@ -3879,7 +3925,7 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                       setCustomPitchValue(val);
                       setBaritonePreset("custom");
                       safeStorage.setItem("antena_baritone_pitch", String(val));
-                      if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+                      safeCancelSpeech();
                     }}
                     className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-slate-900 rounded-lg"
                   />
