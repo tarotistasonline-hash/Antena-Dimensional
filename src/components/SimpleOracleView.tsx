@@ -28,6 +28,8 @@ import {
 import { DimensionPreset, TransmitResponse, SignalResponse } from "../types";
 import { VISUAL_THEMES, VisualThemeId } from "../themes";
 import { TransdimensionalTuningHUD } from "./TransdimensionalTuningHUD";
+import HoloSchematicModal from "./HoloSchematicModal";
+import HoloSchematicPreviewCard from "./HoloSchematicPreviewCard";
 
 interface SimpleOracleViewProps {
   presets: DimensionPreset[];
@@ -208,6 +210,8 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
 }) => {
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showSchematicModal, setShowSchematicModal] = useState(false);
+  const [showSchematicModalTab, setShowSchematicModalTab] = useState<"image" | "video">("image");
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedAnswer, setCopiedAnswer] = useState(false);
 
@@ -599,6 +603,19 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
             >
               <HelpCircle className="w-4 h-4 text-emerald-400" />
               <span>¿Cómo funciona?</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowSchematicModalTab("image");
+                setShowSchematicModal(true);
+              }}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-200 border border-cyan-500/40 text-xs font-bold shadow-md transition-all cursor-pointer"
+              title="Explora la infografía técnica HD y el video demostración en smartphone creados con Flow"
+            >
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              <span>Holo-Esquema</span>
             </button>
 
             <button
@@ -1559,6 +1576,16 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
               <p className="text-xs text-slate-400 italic">
                 ¡Comparte el enlace o el mensaje recibido con tus amigos para que ellos también realicen sus consultas!
               </p>
+
+              {/* Ficha Holo-Esquema & Demostración Móvil Flow integrada en la ayuda */}
+              <div className="pt-1">
+                <HoloSchematicPreviewCard
+                  onOpenModal={(tab) => {
+                    setShowSchematicModalTab(tab);
+                    setShowSchematicModal(true);
+                  }}
+                />
+              </div>
             </div>
 
             <div className="pt-2 flex justify-end">
@@ -1682,6 +1709,13 @@ export const SimpleOracleView: React.FC<SimpleOracleViewProps> = ({
           </div>
         );
       })()}
+
+      {/* MODAL DE HOLO-ESQUEMA & VIDEO DE ENLACE FLOW */}
+      <HoloSchematicModal
+        isOpen={showSchematicModal}
+        onClose={() => setShowSchematicModal(false)}
+        initialTab={showSchematicModalTab}
+      />
     </div>
   );
 };

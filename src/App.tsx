@@ -84,6 +84,8 @@ import { SimpleOracleView } from "./components/SimpleOracleView";
 import { OperatorAuthModal } from "./components/OperatorAuthModal";
 import { TransdimensionalTuningHUD } from "./components/TransdimensionalTuningHUD";
 import { WELCOME_AUDIO_EXPLANATION } from "./components/WelcomeVoiceGuide";
+import HoloSchematicModal from "./components/HoloSchematicModal";
+import HoloSchematicPreviewCard from "./components/HoloSchematicPreviewCard";
 import { safeStorage, safeRandomId } from "./utils/storage";
 
 const safeCancelSpeech = () => {
@@ -268,6 +270,12 @@ export default function App() {
   const [isTelemetryModalOpen, setIsTelemetryModalOpen] = useState(false);
   const [isSuggestionsModalOpen, setIsSuggestionsModalOpen] = useState(false);
   const [isFundingModalOpen, setIsFundingModalOpen] = useState(false);
+  const [isHoloModalOpen, setIsHoloModalOpen] = useState(false);
+  const [holoModalTab, setHoloModalTab] = useState<"image" | "video">("image");
+  const handleOpenHoloModal = (tab: "image" | "video" = "image") => {
+    setHoloModalTab(tab);
+    setIsHoloModalOpen(true);
+  };
   const [isExcludedOperator, setIsExcludedOperator] = useState<boolean>(() => {
     return isCurrentOperatorExcluded();
   });
@@ -2750,6 +2758,19 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
 
           {/* Estado, Visitas Reales, Bajo Consumo, Modo Inmersión e Identificación de Operador Local */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* BOTÓN HOLO-ESQUEMA & VIDEO (ARTE FLOW) */}
+            <button
+              type="button"
+              onClick={() => handleOpenHoloModal("image")}
+              className="flex items-center gap-2 bg-gradient-to-r from-cyan-950/90 via-blue-950/80 to-cyan-900/90 hover:from-cyan-900 hover:to-blue-900 border border-cyan-500/70 hover:border-cyan-400 rounded-lg py-1.5 px-3 text-xs shadow-[0_0_15px_rgba(6,182,212,0.25)] transition-all duration-200 cursor-pointer group"
+              title="Explora el esquema técnico HD y el video demostración en smartphone creados con Flow"
+            >
+              <Sparkles className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+              <span className="font-mono text-cyan-200 font-bold text-[11px]">
+                📐 Holo-Esquema
+              </span>
+            </button>
+
             {/* BOTÓN LIBRO DE VISITAS */}
             <button
               type="button"
@@ -3173,6 +3194,9 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                   </p>
                 </div>
               </div>
+
+              {/* Ficha Holo-Esquema & Demostración Móvil Flow integrada en la Guía */}
+              <HoloSchematicPreviewCard onOpenModal={handleOpenHoloModal} />
 
               {/* Mini Glosario Didáctico para Principiantes */}
               <div className="bg-slate-950/90 border border-amber-500/30 p-3.5 rounded-xl space-y-2 text-[11px]">
@@ -5409,6 +5433,39 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               <span>Ver detalles y opciones</span>
             </button>
           </div>
+
+          {/* Tarjeta: Archivo Visual Holo-Esquema & Video (Flow) */}
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 shrink-0">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-200">
+                  Holo-Esquema &amp; Demostración de Enlace (Creado con Flow)
+                </h3>
+                <p className="text-[11px] text-slate-400 font-sans">
+                  Infografía técnica HD &quot;UNDERSTANDING ANTENA DIMENSIONAL&quot; y registro en video de apertura del portal en smartphone.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => handleOpenHoloModal("image")}
+                className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-cyan-500/50 text-cyan-200 font-mono text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Ver Infografía HD</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenHoloModal("video")}
+                className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-fuchsia-500/50 text-fuchsia-200 font-mono text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Ver Video Móvil</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     )}
@@ -6019,6 +6076,13 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
           </div>
         </div>
       )}
+
+      {/* MODAL HOLO-ESQUEMA & VIDEO FLOW */}
+      <HoloSchematicModal
+        isOpen={isHoloModalOpen}
+        onClose={() => setIsHoloModalOpen(false)}
+        initialTab={holoModalTab}
+      />
     </div>
   );
 }
