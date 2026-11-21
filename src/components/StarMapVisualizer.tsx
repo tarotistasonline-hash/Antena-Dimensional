@@ -289,7 +289,7 @@ export default function StarMapVisualizer({
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [isAutoRotate, setIsAutoRotate] = useState<boolean>(true);
+  const [isAutoRotate, setIsAutoRotate] = useState<boolean>(false);
   const [showCelestialGrid, setShowCelestialGrid] = useState<boolean>(true);
   const [filterDanger, setFilterDanger] = useState<string>("TODOS");
 
@@ -621,9 +621,9 @@ export default function StarMapVisualizer({
       const activeZoom = currentZoomRef.current;
       const baseRadius = Math.min(width, height) * 0.42 * activeZoom;
 
-      // If locked on a target in Observatory Mode (and not actively dragging), keep target centered
+      // If locked on a target in Observatory Mode (and not actively dragging), keep target centered without circular swaying
       if (isObservatoryMode && isTargetLocked && selectedNode && !isDragging) {
-        const targetAngle = selectedNode.angle + rot;
+        const targetAngle = selectedNode.angle;
         const targetDist = Math.min(width, height) * 0.42 * targetZoomRef.current * selectedNode.radiusFactor;
         targetPanRef.current = {
           x: -Math.cos(targetAngle) * targetDist,
@@ -1228,7 +1228,7 @@ export default function StarMapVisualizer({
       const centerY = height / 2 + activePan.y;
       const baseRadius = Math.min(width, height) * 0.42 * activeZoom;
       const rot = rotationAngleRef.current;
-      const hitRadius = 24 * Math.min(2.2, Math.max(1, Math.sqrt(activeZoom)));
+      const hitRadius = Math.max(34, 28 * Math.min(2.5, Math.max(1, Math.sqrt(activeZoom))));
 
       for (const node of filteredNodes) {
         const currentAngle = node.angle + rot;
@@ -1249,19 +1249,12 @@ export default function StarMapVisualizer({
     [filteredNodes]
   );
 
-  // Pointer Dragging & Click Handling (works for both mouse and touch)
+  const pointerStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Pointer Dragging & Click Handling (works for both mouse and touch without wild swaying)
   const handlePointerDown = (e: React.PointerEvent) => {
     dragMovedRef.current = false;
-    const hitNode = getNodeAtCoords(e.clientX, e.clientY);
-    if (hitNode) {
-      if (isObservatoryMode) {
-        focusNodeDeepZoom(hitNode, Math.max(targetZoomRef.current, 3.4));
-      } else {
-        setSelectedNodeId(hitNode.id);
-      }
-      return;
-    }
-    setIsDragging(true);
+    pointerStartPosRef.current = { x: e.clientX, y: e.clientY };
     setDragStart({
       x: e.clientX - currentPanRef.current.x,
       y: e.clientY - currentPanRef.current.y,
@@ -1272,14 +1265,27 @@ export default function StarMapVisualizer({
     const hitNode = getNodeAtCoords(e.clientX, e.clientY);
     setHoveredNode(hitNode);
 
-    if (isDragging) {
+    const dist = Math.hypot(
+      e.clientX - pointerStartPosRef.current.x,
+      e.clientY - pointerStartPosRef.current.y
+    );
+
+    if (dist > 7) {
       dragMovedRef.current = true;
+      setIsDragging(true);
       if (isObservatoryMode && isTargetLocked) {
         setIsTargetLocked(false);
       }
+      const canvas = canvasRef.current;
+      const w = canvas?.clientWidth || 600;
+      const h = canvas?.clientHeight || 400;
+      const activeZoom = currentZoomRef.current;
+      const maxPanX = Math.max(80, (w * (activeZoom - 0.7)) / 2 + 60);
+      const maxPanY = Math.max(80, (h * (activeZoom - 0.7)) / 2 + 60);
+
       const nextPan = {
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y,
+        x: Math.max(-maxPanX, Math.min(maxPanX, e.clientX - dragStart.x)),
+        y: Math.max(-maxPanY, Math.min(maxPanY, e.clientY - dragStart.y)),
       };
       targetPanRef.current = nextPan;
       currentPanRef.current = nextPan;
@@ -1287,8 +1293,19 @@ export default function StarMapVisualizer({
     }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e: React.PointerEvent) => {
     setIsDragging(false);
+    // If it was a tap (not a drag), select the node cleanly
+    if (!dragMovedRef.current) {
+      const hitNode = getNodeAtCoords(e.clientX, e.clientY);
+      if (hitNode) {
+        if (isObservatoryMode) {
+          focusNodeDeepZoom(hitNode, Math.max(targetZoomRef.current, 3.4));
+        } else {
+          setSelectedNodeId(hitNode.id);
+        }
+      }
+    }
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -1553,7 +1570,7 @@ export default function StarMapVisualizer({
         {/* CANVAS STAGE (7/8 or 12 cols depending on inspector) */}
         <div
           ref={containerRef}
-          className={`relative rounded-xl border overflow-hidden bg-slate-950 min-h-[380px] h-[420px] select-none touch-none cursor-${
+          className={`relative rounded-xl border overflow-hidden bg-slate-950 min-h-[380px] h-[420px] select-none touch-pan-y cursor-${
             isDragging ? "grabbing" : hoveredNode ? "pointer" : "grab"
           } ${
             selectedNode ? (isObservatoryMode ? "lg:col-span-7" : "lg:col-span-8") : "lg:col-span-12"
@@ -1848,9 +1865,6 @@ export default function StarMapVisualizer({
                     color: selectedNode.color,
                   };
                   onSelectDimension(targetPreset);
-                  if (typeof window !== "undefined") {
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }
                 }}
                 className="w-full py-2.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:scale-[1.01]"
               >
@@ -1870,6 +1884,41 @@ export default function StarMapVisualizer({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Selector rápido y estático de civilizaciones para acceso inmediato sin movimiento */}
+      <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-900/80">
+        <span className="text-[10px] font-mono text-slate-400 font-bold mr-1">
+          Sintonización Directa:
+        </span>
+        {DIMENSION_PRESETS.map((preset) => {
+          const isSelected =
+            selectedNode?.presetObj?.id === preset.id || currentDimension === preset.coordinates;
+          return (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => {
+                setSelectedNodeId(preset.id);
+                onSelectDimension(preset);
+              }}
+              className={`px-2.5 py-1.5 rounded-lg text-[10px] font-mono transition-all cursor-pointer border flex items-center gap-1.5 ${
+                isSelected
+                  ? "bg-slate-950 text-white font-bold border-emerald-400/80 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                  : "bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-600 hover:text-white"
+              }`}
+            >
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: preset.color }}
+              />
+              <span>{preset.name.split("(")[0].trim()}</span>
+              <span className="text-[9px] text-slate-400 hidden sm:inline">
+                ({preset.frequency})
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* FOOTER METRICS */}
