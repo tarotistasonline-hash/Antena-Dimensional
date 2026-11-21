@@ -67,7 +67,6 @@ import DirectoryList from "./components/DirectoryList";
 import LogTable from "./components/LogTable";
 import TelemetryChart from "./components/TelemetryChart";
 import FundingWidget from "./components/FundingWidget";
-import DimensionalNetworkPanel from "./components/DimensionalNetworkPanel";
 import StarMapVisualizer from "./components/StarMapVisualizer";
 import MembraneStatusPanel from "./components/MembraneStatusPanel";
 import AntennaSelectorModal, { ANTENNA_OPTIONS } from "./components/AntennaSelectorModal";
@@ -5126,15 +5125,46 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
           />
 
           {/* Mapa Estelar Interactivo de Dimensiones (Canvas & D3) */}
-          <StarMapVisualizer
-            logs={logs}
-            currentDimension={dimension}
-            tuningResult={tuningResult}
-            onSelectDimension={handleSelectPreset}
-            frequencyValue={frequencyValue}
-            frequencyUnit={frequencyUnit}
-            isLowPowerMode={isLowPowerMode}
-          />
+          {activeMainTab === "telemetry" ? (
+            <StarMapVisualizer
+              logs={logs}
+              currentDimension={dimension}
+              tuningResult={tuningResult}
+              onSelectDimension={handleSelectPreset}
+              frequencyValue={frequencyValue}
+              frequencyUnit={frequencyUnit}
+              isLowPowerMode={isLowPowerMode}
+            />
+          ) : (
+            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-left shadow-lg backdrop-blur-md">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-indigo-500/15 border border-indigo-500/40 text-indigo-300 shrink-0">
+                  <Compass className="w-5 h-5 animate-spin" style={{ animationDuration: "16s" }} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-100 flex items-center gap-2">
+                    <span>Mapa Estelar Cuántico &amp; Modo Observatorio</span>
+                    <span className="text-[9px] px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-700/60 font-bold">
+                      Activo al Pie de Página
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 font-sans">
+                    Modo Observatorio, zoom hasta 500%, rastro cósmico y sintonización directa habilitados al final de la estación.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById("footer-starmap-container");
+                  el?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="px-3.5 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 border border-indigo-600/60 text-indigo-200 font-mono text-xs font-bold transition-all cursor-pointer shrink-0 shadow-md flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <span>Explorar Mapa Estelar ↓</span>
+              </button>
+            </div>
+          )}
 
           {/* Historial de Resonancia Temporal */}
           <TelemetryChart logs={logs} />
@@ -5489,16 +5519,18 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
         )}
       </main>
 
-      {/* Footer global con el Mapa Vivo de Redes Dimensionales e Entidades */}
+      {/* Footer global con el Mapa Estelar Interactivo de Dimensiones */}
       <footer className="app-theme-footer border-t border-slate-900 bg-slate-950/80 py-8 text-center text-[10px] text-slate-500 font-mono mt-12 space-y-6">
-        <div className="max-w-7xl mx-auto px-4 space-y-6">
-          {/* Mapa móvil de Redes Dimensionales y selección directa de entidades */}
-          <DimensionalNetworkPanel
-            activePresetId={activePresetId}
+        <div id="footer-starmap-container" className="max-w-7xl mx-auto px-4 space-y-6 text-left">
+          {/* Mapa Estelar Interactivo de Dimensiones con Modo Observatorio, Rejilla, Rastro, Zoom y Filtro */}
+          <StarMapVisualizer
+            logs={logs}
             currentDimension={dimension}
-            onSelectPreset={handleSelectPreset}
+            tuningResult={tuningResult}
+            onSelectDimension={handleSelectPreset}
+            frequencyValue={frequencyValue}
+            frequencyUnit={frequencyUnit}
             isLowPowerMode={isLowPowerMode}
-            visualTheme={visualTheme}
           />
 
           <div className="border-t border-slate-900/80 pt-4 space-y-1.5 text-slate-500">

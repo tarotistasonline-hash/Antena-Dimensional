@@ -1848,6 +1848,9 @@ export default function StarMapVisualizer({
                     color: selectedNode.color,
                   };
                   onSelectDimension(targetPreset);
+                  if (typeof window !== "undefined") {
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }
                 }}
                 className="w-full py-2.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:scale-[1.01]"
               >
