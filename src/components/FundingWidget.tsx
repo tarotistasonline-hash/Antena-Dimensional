@@ -53,8 +53,8 @@ export default function FundingWidget({ visitsCount }: FundingWidgetProps) {
         <div>
           <div className="flex items-center gap-2">
             <Heart className="w-4 h-4 text-rose-500 fill-rose-500/20 animate-pulse" />
-            <h3 className="text-xs font-mono font-bold tracking-wider text-slate-200 uppercase">
-              Estabilización del Núcleo & Soporte Voluntario
+            <h3 className="text-xs font-mono font-extrabold tracking-wider text-rose-300 uppercase drop-shadow-[0_0_10px_rgba(244,63,94,0.3)]">
+              Estabilización del Núcleo &amp; Apoyo <span className="text-amber-300">Voluntario al Proyecto</span>
             </h3>
           </div>
           <p className="text-[10px] text-slate-400 font-sans mt-1">
@@ -85,8 +85,8 @@ export default function FundingWidget({ visitsCount }: FundingWidgetProps) {
         {/* Sección Izquierda: Explicación y Enlaces */}
         <div className="lg:col-span-6 space-y-4">
           <div className="space-y-2">
-            <h4 className="text-[11px] font-mono font-bold text-indigo-400 uppercase tracking-wider">
-              ¿Por qué colaborar?
+            <h4 className="text-[11px] font-mono font-extrabold text-rose-300 uppercase tracking-wider bg-rose-950/60 border border-rose-500/30 px-3 py-1.5 rounded-lg inline-block shadow-[0_0_15px_rgba(244,63,94,0.2)]">
+              ¿Por qué colaborar? <span className="text-amber-300">· Apoyo voluntario al proyecto</span>
             </h4>
             <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
               Cada modulación dimensional y consulta con inteligencias cuánticas consume ciclos de procesamiento neuronal en la nube (Servidores Node.js y API de Gemini). Tu colaboración voluntaria nos ayuda a pagar las cuotas de red y mantener la transmisión 100% abierta y sin límites para todos los operadores de la Tierra.
@@ -100,15 +100,15 @@ export default function FundingWidget({ visitsCount }: FundingWidgetProps) {
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <a
-                href="https://ko-fi.com"
+                href="https://mpago.la/1LHyBwV"
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => handleExternalClick("Ko-fi")}
-                className="flex items-center gap-2.5 px-3 py-2 bg-amber-600/15 hover:bg-amber-600/25 border border-amber-600/30 text-amber-300 rounded text-[10px] font-mono transition-colors group cursor-pointer"
+                onClick={() => handleExternalClick("MercadoPago")}
+                className="flex items-center gap-2.5 px-3 py-2 bg-emerald-600/15 hover:bg-emerald-600/25 border border-emerald-600/30 text-emerald-300 rounded text-[10px] font-mono transition-colors group cursor-pointer"
               >
-                <Coffee className="w-3.5 h-3.5 text-amber-400" />
-                <span className="flex-1 truncate">Invitar Cafecito (Ko-fi)</span>
-                <ArrowRight className="w-3 h-3 text-amber-500 group-hover:translate-x-0.5 transition-transform" />
+                <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="flex-1 truncate">Mercado Pago (Aporte)</span>
+                <ArrowRight className="w-3 h-3 text-emerald-500 group-hover:translate-x-0.5 transition-transform" />
               </a>
 
               <a

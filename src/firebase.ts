@@ -79,7 +79,7 @@ export function handleFirestoreError(
   error: unknown,
   operationType: OperationType,
   path: string | null
-): never {
+): void {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -97,7 +97,11 @@ export function handleFirestoreError(
     operationType,
     path,
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  console.warn('Firestore Notice / Offline: ', JSON.stringify(errInfo));
+  const errStr = errInfo.error.toLowerCase();
+  if (errStr.includes('offline') || errStr.includes('unavailable') || errStr.includes('network')) {
+    return;
+  }
   throw new Error(JSON.stringify(errInfo));
 }
 
