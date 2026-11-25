@@ -5446,8 +5446,8 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
                 <Heart className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-xs font-mono font-extrabold uppercase tracking-wider text-rose-300 drop-shadow-[0_0_10px_rgba(244,63,94,0.3)]">
-                  ¿Por qué colaborar? <span className="text-amber-300">· Apoyo voluntario al proyecto</span>
+                <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-200">
+                  ¿Por qué colaborar con el proyecto?
                 </h3>
                 <p className="text-[11px] text-slate-400 font-sans">
                   Información transparente sobre el mantenimiento independiente de la estación y opciones de apoyo voluntario.
@@ -5540,10 +5540,9 @@ const ensureVoidTransmitExtras = (resp: TransmitResponse): TransmitResponse => (
               <button
                 type="button"
                 onClick={() => setIsFundingModalOpen(true)}
-                className="text-[11px] font-mono font-extrabold text-rose-300 hover:text-rose-200 underline decoration-rose-500/80 hover:decoration-rose-400 underline-offset-4 transition-all cursor-pointer bg-rose-950/40 px-3 py-1.5 rounded-lg border border-rose-500/40 shadow-[0_0_15px_rgba(244,63,94,0.2)] inline-flex items-center gap-1.5"
+                className="text-[10px] font-mono text-slate-400 hover:text-rose-300 underline decoration-slate-700 hover:decoration-rose-400/60 underline-offset-4 transition-colors cursor-pointer"
               >
-                <Heart className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
-                <span>¿Por qué colaborar? <strong className="text-amber-300">· Apoyo voluntario al proyecto</strong></span>
+                ¿Por qué colaborar? · Apoyo voluntario al proyecto
               </button>
             </div>
           </div>
